@@ -1,0 +1,105 @@
+# Configuration ELECTRE TRI pour classement des produits alimentaires
+# Basé sur les critères nutritionnels
+
+# Poids des critères (normalisés dans le code)
+weights:
+  energy_100g: 0.18        # Énergie (coût)
+  saturated_fat_100g: 0.16 # AG saturés (coût) 
+  sugars_100g: 0.15        # Sucres (coût)
+  sodium_100g: 0.14        # Sodium (coût)
+  proteins_100g: 0.13      # Protéines (bénéfice)
+  fiber_100g: 0.12         # Fibres (bénéfice)
+  fruits_veg_nuts_percent: 0.12  # Fruits/légumes/noix (bénéfice)
+  additives_count: 0.10    # Additifs (coût) - optionnel
+
+# Direction des critères (-1 = coût à minimiser, +1 = bénéfice à maximiser)
+directions:
+  energy_100g: -1
+  saturated_fat_100g: -1
+  sugars_100g: -1
+  sodium_100g: -1
+  proteins_100g: 1
+  fiber_100g: 1
+  fruits_veg_nuts_percent: 1
+  additives_count: -1
+
+# Profils limites pour 5 classes (A' > B' > C' > D' > E')
+# b1: limite entre A' et B'
+# b2: limite entre B' et C'  
+# b3: limite entre C' et D'
+# b4: limite entre D' et E'
+profiles:
+  b1:  # Excellente qualité nutritionnelle (A')
+    energy_100g: 335        # ≤ 335 kJ (80 kcal)
+    saturated_fat_100g: 1.0 # ≤ 1g
+    sugars_100g: 4.5        # ≤ 4.5g
+    sodium_100g: 90         # ≤ 90mg
+    proteins_100g: 1.6      # ≥ 1.6g
+    fiber_100g: 0.9         # ≥ 0.9g
+    fruits_veg_nuts_percent: 40  # ≥ 40%
+    additives_count: 0      # ≤ 0
+  
+  b2:  # Bonne qualité nutritionnelle (B')
+    energy_100g: 700        # ≤ 700 kJ (167 kcal)
+    saturated_fat_100g: 2.0 # ≤ 2g
+    sugars_100g: 9.0        # ≤ 9g
+    sodium_100g: 180        # ≤ 180mg
+    proteins_100g: 0.8      # ≥ 0.8g
+    fiber_100g: 0.7         # ≥ 0.7g
+    fruits_veg_nuts_percent: 20  # ≥ 20%
+    additives_count: 1      # ≤ 1
+  
+  b3:  # Qualité nutritionnelle moyenne (C')
+    energy_100g: 1400       # ≤ 1400 kJ (335 kcal)
+    saturated_fat_100g: 4.0 # ≤ 4g
+    sugars_100g: 18.0       # ≤ 18g
+    sodium_100g: 360        # ≤ 360mg
+    proteins_100g: 0.4      # ≥ 0.4g
+    fiber_100g: 0.0         # ≥ 0g
+    fruits_veg_nuts_percent: 0   # ≥ 0%
+    additives_count: 3      # ≤ 3
+  
+  b4:  # Qualité nutritionnelle médiocre (D')
+    energy_100g: 2100       # ≤ 2100 kJ (502 kcal)
+    saturated_fat_100g: 8.0 # ≤ 8g
+    sugars_100g: 36.0       # ≤ 36g
+    sodium_100g: 720        # ≤ 720mg
+    proteins_100g: 0.0      # ≥ 0g
+    fiber_100g: 0.0         # ≥ 0g
+    fruits_veg_nuts_percent: 0   # ≥ 0%
+    additives_count: 6      # ≤ 6
+
+# Paramètre lambda pour la concordance (seuil de majorité)
+lambda: 0.7
+
+# Seuils optionnels (par défaut tous à 0)
+thresholds:
+  q:  # Seuils d'indifférence
+    energy_100g: 0
+    saturated_fat_100g: 0
+    sugars_100g: 0
+    sodium_100g: 0
+    proteins_100g: 0
+    fiber_100g: 0
+    fruits_veg_nuts_percent: 0
+    additives_count: 0
+  
+  p:  # Seuils de préférence
+    energy_100g: 0
+    saturated_fat_100g: 0
+    sugars_100g: 0
+    sodium_100g: 0
+    proteins_100g: 0
+    fiber_100g: 0
+    fruits_veg_nuts_percent: 0
+    additives_count: 0
+  
+  v:  # Seuils de véto
+    energy_100g: 0
+    saturated_fat_100g: 0
+    sugars_100g: 0
+    sodium_100g: 0
+    proteins_100g: 0
+    fiber_100g: 0
+    fruits_veg_nuts_percent: 0
+    additives_count: 0

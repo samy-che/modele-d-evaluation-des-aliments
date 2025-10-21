@@ -1,0 +1,29 @@
+# Requirements pour le prototype Nutri-Score / ELECTRE TRI
+# Python 3.10+
+
+# Core data processing
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+
+# Configuration files
+pyyaml>=6.0
+
+# Visualization and plotting
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Machine learning metrics (optionnel selon spécifications)
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# User interface
+streamlit>=1.28.0
+
+# Development and testing (optionnel)
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Pour la gestion des logs
+colorlog>=6.7.0

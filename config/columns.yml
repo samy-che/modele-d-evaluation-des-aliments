@@ -1,0 +1,76 @@
+product_name:
+- product_name
+- nom_produit
+- name
+- product
+- nom
+- Produit
+energy_100g:
+- energy_100g
+- energy-kj_100g
+- energy_kj_100g
+- energy_kcal_100g
+- energie_100g
+- energie_kj_100g
+- energie_kcal_100g
+- énergie_100g
+- valeur énergétique (Kcal/KJ)
+saturated_fat_100g:
+- saturated_fat_100g
+- saturated-fat_100g
+- ag_satures_100g
+- acides_gras_satures_100g
+- graisses_saturees_100g
+- quantité d'acides gras saturés (g)
+- quantité d'acides gras saturés (g)
+- quantité d’acides gras saturés (g)
+sugars_100g:
+- sugars_100g
+- sugar_100g
+- sucres_100g
+- glucides_sucres_100g
+- quantité de sucres (g)
+sodium_100g:
+- sodium_100g
+- sel_100g
+- salt_100g
+- sodium_mg_100g
+- sel_mg_100g
+- quantité de Sodium (g/mg)
+proteins_100g:
+- proteins_100g
+- protein_100g
+- proteines_100g
+- protéines_100g
+- quantité de protéines (g)
+fiber_100g:
+- fiber_100g
+- fibres_100g
+- fibres_alimentaires_100g
+- fibre_100g
+- quantité de Fibres (g)
+fruits_veg_nuts_percent:
+- fruits_veg_nuts_percent
+- fruits_vegetables_nuts_100g
+- fruits_legumes_noix_100g
+- fruits_legumes_noix_percent
+- pourcentage_fruits_legumes_noix
+- teneur en Fruits/Légumes/Fruits à coques
+nutriscore_label:
+- nutriscore_label
+- nutriscore_grade
+- nutri_score
+- grade_nutriscore
+- nutriscore
+- label nutri Score
+nutriscore_score:
+- nutriscore_score
+- score_nutriscore
+- nutri_score_points
+- Score issue de nutri Score
+additives_count:
+- additives_count
+- nombre_additifs
+- nb_additifs
+- additifs_count
+- Nombre d'aditife
