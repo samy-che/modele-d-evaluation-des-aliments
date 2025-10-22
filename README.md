@@ -7,7 +7,7 @@ Outil de comparaison entre le calcul officiel du Nutri-Score et la méthode de c
 ## Fonctionnalités
 
 - ✅ **Calcul Nutri-Score officiel** : Implémentation complète avec les 7 composantes nutritionnelles
-- ✅ **ELECTRE TRI-B** : Classification multicritère avec profils limites (variantes pessimiste/optimiste)  
+- ✅ **ELECTRE TRI-B simplifié** : Classification multicritère avec concordance binaire (variantes pessimiste/optimiste)  
 - ✅ **Interface graphique Streamlit** : Calcul unitaire et traitement de datasets
 - ✅ **Comparaison et évaluation** : Matrice de confusion, métriques de performance
 - ✅ **Normalisation automatique** : Conversion kJ/kcal, sel/sodium, nettoyage des données
@@ -141,6 +141,16 @@ energy_100g:
 - **Lambda** : Seuil de concordance pour le surclassement (0.5-1.0)
 - **Directions** : Coût (-1) ou bénéfice (+1) pour chaque critère
 
+#### Version simplifiée d'ELECTRE TRI
+
+Cette implémentation utilise une version simplifiée d'ELECTRE TRI conforme aux spécifications du projet :
+
+- **Concordance binaire** : Indices de concordance partielle en 0 ou 1 (sans seuils de préférence/indifférence)
+- **Pas de discordance ni de véto** : Évaluation basée uniquement sur la concordance globale
+- **Logique de classification corrigée** :
+  - **Pessimiste** : Parcours des profils b4→b3→b2, affectation selon premier profil surclassé
+  - **Optimiste** : Parcours des profils b2→b3→b4, affectation selon premier profil surclassant
+
 ## Sorties générées
 
 ### Fichiers automatiques
@@ -157,6 +167,17 @@ energy_100g:
 - **Tolérance** : Accuracy avec ±1 et ±2 niveaux d'écart
 
 ## Limitations et hypothèses
+
+### Version ELECTRE TRI implémentée
+
+Cette implémentation utilise une **version simplifiée d'ELECTRE TRI** :
+
+- **Concordance binaire** : Les indices de concordance partielle sont calculés en 0 ou 1 uniquement
+  - Critère à maximiser : `1 si valeur_alternative >= valeur_profil, sinon 0`
+  - Critère à minimiser : `1 si valeur_alternative <= valeur_profil, sinon 0`
+- **Absence de seuils** : Pas de seuils de préférence (p), d'indifférence (q) ou de véto (v)
+- **Pas de discordance** : Seule la concordance globale (somme pondérée) est utilisée pour le surclassement
+- **Classification corrigée** : Logic d'affectation aux classes respectant la théorie ELECTRE TRI
 
 ### Données manquantes
 - **Critères critiques manquants** : La ligne est supprimée du traitement
@@ -204,11 +225,13 @@ En cas de problème :
 ## Critères d'acceptation (démo)
 
 ✅ **Calcul unitaire** : L'interface calcule correctement le Nutri-Score à partir des 7 composantes  
-✅ **Classification ELECTRE** : Application de la méthode ELECTRE TRI sur produits individuels et datasets  
+✅ **Classification ELECTRE** : Application de la méthode ELECTRE TRI simplifiée sur produits individuels et datasets  
 ✅ **Comparaison automatique** : Génération de matrice de confusion et métriques en un clic  
 ✅ **Fichiers de sortie** : PNG des graphiques et Excel des résultats dans `outputs/`  
 ✅ **Robustesse** : Gestion des conversions d'unités et valeurs manquantes avec messages informatifs  
+✅ **Conformité théorique** : Implémentation conforme à la version simplifiée d'ELECTRE TRI spécifiée  
 
 ---
 
-*Prototype développé selon les spécifications du 19 octobre 2025*
+*Prototype développé selon les spécifications du 19 octobre 2025*  
+*Version ELECTRE TRI simplifiée mise à jour le 22 octobre 2025*

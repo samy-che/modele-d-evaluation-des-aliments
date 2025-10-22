@@ -91,7 +91,7 @@ class ElectreTri:
                                   profile: Dict[str, float], 
                                   criterion: str) -> float:
         """
-        Calcule l'indice de concordance partielle pour un critère.
+        Calcule l'indice de concordance partielle pour un critère (version simplifiée binaire).
         
         Args:
             alternative: Valeurs de l'alternative
@@ -99,7 +99,7 @@ class ElectreTri:
             criterion: Nom du critère
             
         Returns:
-            Indice de concordance (0 ou 1)
+            Indice de concordance binaire (0 ou 1)
         """
         if criterion not in alternative or criterion not in profile:
             logger.warning(f"Critère {criterion} manquant")
@@ -113,101 +113,28 @@ class ElectreTri:
         if pd.isna(alt_val) or pd.isna(prof_val):
             return 0.0
         
-        # Seuils (optionnels, par défaut 0)
-        thresholds = self.params.get('thresholds', {})
-        q = thresholds.get('q', {}).get(criterion, 0)  # Indifférence
-        p = thresholds.get('p', {}).get(criterion, 0)  # Préférence
-        
-        if direction == 1:  # Critère bénéfice (maximiser)
-            # alt_val >= prof_val - q : concordance complète
-            if alt_val >= prof_val - q:
-                return 1.0
-            # alt_val <= prof_val - p : pas de concordance
-            elif alt_val <= prof_val - p:
-                return 0.0
-            # Sinon : concordance partielle
-            else:
-                return (alt_val - prof_val + p) / (p - q)
-        
-        else:  # Critère coût (minimiser)  
-            # alt_val <= prof_val + q : concordance complète
-            if alt_val <= prof_val + q:
-                return 1.0
-            # alt_val >= prof_val + p : pas de concordance
-            elif alt_val >= prof_val + p:
-                return 0.0
-            # Sinon : concordance partielle
-            else:
-                return (prof_val + p - alt_val) / (p - q)
-    
-    def _compute_discordance_index(self, 
-                                  alternative: Dict[str, float], 
-                                  profile: Dict[str, float], 
-                                  criterion: str) -> float:
+        # Logique binaire simplifiée (sans seuils)
+        if direction == 1:  # Critère à maximiser (bénéfice)
+            return 1.0 if alt_val >= prof_val else 0.0
+        else:  # Critère à minimiser (coût)
+            return 1.0 if alt_val <= prof_val else 0.0
+
+    def _compute_global_concordance(self, 
+                                   alternative: Dict[str, float], 
+                                   profile: Dict[str, float]) -> float:
         """
-        Calcule l'indice de discordance partielle pour un critère.
-        
-        Args:
-            alternative: Valeurs de l'alternative
-            profile: Valeurs du profil limite
-            criterion: Nom du critère
-            
-        Returns:
-            Indice de discordance (0 à 1)
-        """
-        if criterion not in alternative or criterion not in profile:
-            return 0.0
-        
-        alt_val = alternative[criterion]
-        prof_val = profile[criterion]
-        direction = self.params['directions'][criterion]
-        
-        # Valeurs manquantes
-        if pd.isna(alt_val) or pd.isna(prof_val):
-            return 0.0
-        
-        # Seuils
-        thresholds = self.params.get('thresholds', {})
-        p = thresholds.get('p', {}).get(criterion, 0)  # Préférence
-        v = thresholds.get('v', {}).get(criterion, 0)  # Véto
-        
-        if v == 0:  # Pas de seuil de véto
-            return 0.0
-        
-        if direction == 1:  # Critère bénéfice
-            # Véto si alt_val est trop inférieure au profil
-            if alt_val <= prof_val - v:
-                return 1.0
-            elif alt_val > prof_val - p:
-                return 0.0
-            else:
-                return (prof_val - p - alt_val) / (v - p)
-        
-        else:  # Critère coût
-            # Véto si alt_val est trop supérieure au profil
-            if alt_val >= prof_val + v:
-                return 1.0
-            elif alt_val < prof_val + p:
-                return 0.0
-            else:
-                return (alt_val - prof_val - p) / (v - p)
-    
-    def _compute_credibility_index(self, 
-                                  alternative: Dict[str, float], 
-                                  profile: Dict[str, float]) -> float:
-        """
-        Calcule l'indice de crédibilité global de la relation S(a,b).
+        Calcule l'indice de concordance global de la relation S(a,b).
         
         Args:
             alternative: Valeurs de l'alternative
             profile: Valeurs du profil limite
             
         Returns:
-            Indice de crédibilité (0 à 1)
+            Indice de concordance global (0 à 1)
         """
         criteria = list(self.params['weights'].keys())
         
-        # Calcul de l'indice de concordance globale
+        # Calcul de l'indice de concordance globale (somme pondérée)
         concordance_sum = 0.0
         total_weight = 0.0
         
@@ -221,21 +148,7 @@ class ElectreTri:
         if total_weight == 0:
             return 0.0
         
-        global_concordance = concordance_sum / total_weight
-        
-        # Calcul des indices de discordance et ajustement
-        credibility = global_concordance
-        
-        for criterion in criteria:
-            if criterion in alternative and criterion in profile:
-                discordance = self._compute_discordance_index(alternative, profile, criterion)
-                
-                if discordance > global_concordance:
-                    # Facteur de réduction
-                    factor = (1 - discordance) / (1 - global_concordance) if global_concordance < 1 else 0
-                    credibility *= factor
-        
-        return max(0.0, min(1.0, credibility))
+        return concordance_sum / total_weight
     
     def _outrank_relation(self, 
                          alternative: Dict[str, float], 
@@ -250,10 +163,10 @@ class ElectreTri:
         Returns:
             True si surclassement (S(a,b))
         """
-        credibility = self._compute_credibility_index(alternative, profile)
+        concordance = self._compute_global_concordance(alternative, profile)
         lambda_threshold = self.params['lambda']
         
-        return credibility >= lambda_threshold
+        return concordance >= lambda_threshold
     
     def _classify_pessimistic(self, alternative: Dict[str, float]) -> str:
         """
@@ -266,21 +179,24 @@ class ElectreTri:
             Classe assignée (A', B', C', D', E')
         """
         profiles = self.params['profiles']
-        profile_names = sorted(profiles.keys(), reverse=True)  # b4, b3, b2, b1
+        # Profils triés par ordre décroissant (du meilleur au pire), excluant b1
+        # Supposant que b4 > b3 > b2 > b1 (b4 = meilleur, b1 = pire)
+        profile_names_desc = [name for name in sorted(profiles.keys(), reverse=True) if name != 'b1']
         
-        # Classes correspondantes (ordre décroissant)
-        classes = ['E\'', 'D\'', 'C\'', 'B\'', 'A\'']
+        # Classes correspondantes selon la logique ELECTRE TRI
+        # Si H S bk, alors H appartient à la classe Ck+1
+        classes = ['A\'', 'B\'', 'C\'', 'D\'', 'E\'']
         
-        for i, profile_name in enumerate(profile_names):
+        for i, profile_name in enumerate(profile_names_desc):
             profile = profiles[profile_name]
             
             # Test si a surclasse le profil b_i
             if self._outrank_relation(alternative, profile):
-                # a surclasse b_i, donc a appartient à la classe supérieure
-                return classes[i] if i > 0 else 'A\''
+                # a surclasse b_i, donc a appartient à la classe correspondante
+                return classes[i]
         
         # a ne surclasse aucun profil, donc classe la plus basse
-        return classes[-1]
+        return 'E\''
     
     def _classify_optimistic(self, alternative: Dict[str, float]) -> str:
         """
@@ -293,17 +209,20 @@ class ElectreTri:
             Classe assignée (A', B', C', D', E')
         """
         profiles = self.params['profiles']
-        profile_names = sorted(profiles.keys())  # b1, b2, b3, b4
+        # Profils triés par ordre croissant (du pire au meilleur), excluant b1
+        # b2, b3, b4 (on ignore b1 car c'est la borne inférieure)
+        profile_names_asc = [name for name in sorted(profiles.keys()) if name != 'b1']
         
-        # Classes correspondantes (ordre croissant)
-        classes = ['A\'', 'B\'', 'C\'', 'D\'', 'E\'']
+        # Classes correspondantes selon la logique ELECTRE TRI optimiste
+        # Si bk S H, alors H appartient à la classe Ck-1
+        classes = ['E\'', 'D\'', 'C\'', 'B\'', 'A\'']
         
-        for i, profile_name in enumerate(profile_names):
+        for i, profile_name in enumerate(profile_names_asc):
             profile = profiles[profile_name]
             
             # Test si le profil b_i surclasse a
             if self._outrank_relation(profile, alternative):
-                # b_i surclasse a, donc a appartient à cette classe ou inférieure
+                # b_i surclasse a, donc a appartient à la classe correspondante
                 return classes[i]
         
         # Aucun profil ne surclasse a, donc classe la plus haute
@@ -421,18 +340,18 @@ def classify_single_product(criteria_values: Dict[str, float],
     try:
         assigned_class = electre.classify_alternative(criteria_values, variant)
         
-        # Calculer les crédibilités pour information
+        # Calculer les concordances globales pour information
         profiles = electre.params['profiles']
-        credibilities = {}
+        concordances = {}
         
         for profile_name, profile_values in profiles.items():
-            cred = electre._compute_credibility_index(criteria_values, profile_values)
-            credibilities[f"S(a,{profile_name})"] = round(cred, 3)
+            conc = electre._compute_global_concordance(criteria_values, profile_values)
+            concordances[f"S(a,{profile_name})"] = round(conc, 3)
         
         return {
             'class': assigned_class,
             'variant': variant,
-            'credibilities': credibilities,
+            'concordances': concordances,
             'lambda': electre.params['lambda']
         }
         
@@ -466,7 +385,7 @@ if __name__ == "__main__":
         # Test pessimiste
         result_pess = classify_single_product(test_product, variant="pessimistic")
         print(f"\nClassification pessimiste : {result_pess['class']}")
-        print(f"Crédibilités : {result_pess['credibilities']}")
+        print(f"Concordances : {result_pess['concordances']}")
         
         # Test optimiste
         result_opt = classify_single_product(test_product, variant="optimistic")
