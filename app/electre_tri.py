@@ -170,7 +170,14 @@ class ElectreTri:
     
     def _classify_pessimistic(self, alternative: Dict[str, float]) -> str:
         """
-        Classification pessimiste : compare a aux profils dans l'ordre décroissant.
+        Classification pessimiste : compare a aux profils du meilleur (b1) au pire (b4).
+        
+        Dans ELECTRE TRI pessimiste :
+        - Si a surclasse b1 (le plus exigeant) → classe A'
+        - Si a surclasse b2 mais pas b1 → classe B'
+        - Si a surclasse b3 mais pas b2 → classe C'
+        - Si a surclasse b4 mais pas b3 → classe D'
+        - Si a ne surclasse aucun profil → classe E'
         
         Args:
             alternative: Valeurs de l'alternative à classer
@@ -179,15 +186,16 @@ class ElectreTri:
             Classe assignée (A', B', C', D', E')
         """
         profiles = self.params['profiles']
-        # Profils triés par ordre décroissant (du meilleur au pire), excluant b1
-        # Supposant que b4 > b3 > b2 > b1 (b4 = meilleur, b1 = pire)
-        profile_names_desc = [name for name in sorted(profiles.keys(), reverse=True) if name != 'b1']
         
-        # Classes correspondantes selon la logique ELECTRE TRI
-        # Si H S bk, alors H appartient à la classe Ck+1
+        # Profils dans l'ordre du plus exigeant (b1) au moins exigeant (b4)
+        profile_names_ordered = ['b1', 'b2', 'b3', 'b4']
         classes = ['A\'', 'B\'', 'C\'', 'D\'', 'E\'']
         
-        for i, profile_name in enumerate(profile_names_desc):
+        # Tester les profils dans l'ordre b1, b2, b3, b4
+        for i, profile_name in enumerate(profile_names_ordered):
+            if profile_name not in profiles:
+                continue
+                
             profile = profiles[profile_name]
             
             # Test si a surclasse le profil b_i
@@ -200,7 +208,14 @@ class ElectreTri:
     
     def _classify_optimistic(self, alternative: Dict[str, float]) -> str:
         """
-        Classification optimiste : compare les profils à a dans l'ordre croissant.
+        Classification optimiste : compare les profils à a du pire (b4) au meilleur (b1).
+        
+        Dans ELECTRE TRI optimiste :
+        - Si b4 surclasse a → classe E' (la plus basse)
+        - Si b3 surclasse a mais pas b4 → classe D'
+        - Si b2 surclasse a mais pas b3 → classe C'
+        - Si b1 surclasse a mais pas b2 → classe B'
+        - Si aucun profil ne surclasse a → classe A'
         
         Args:
             alternative: Valeurs de l'alternative à classer
@@ -209,15 +224,16 @@ class ElectreTri:
             Classe assignée (A', B', C', D', E')
         """
         profiles = self.params['profiles']
-        # Profils triés par ordre croissant (du pire au meilleur), excluant b1
-        # b2, b3, b4 (on ignore b1 car c'est la borne inférieure)
-        profile_names_asc = [name for name in sorted(profiles.keys()) if name != 'b1']
         
-        # Classes correspondantes selon la logique ELECTRE TRI optimiste
-        # Si bk S H, alors H appartient à la classe Ck-1
+        # Profils dans l'ordre du moins exigeant (b4) au plus exigeant (b1)
+        profile_names_ordered = ['b4', 'b3', 'b2', 'b1']
         classes = ['E\'', 'D\'', 'C\'', 'B\'', 'A\'']
         
-        for i, profile_name in enumerate(profile_names_asc):
+        # Tester les profils dans l'ordre b4, b3, b2, b1
+        for i, profile_name in enumerate(profile_names_ordered):
+            if profile_name not in profiles:
+                continue
+                
             profile = profiles[profile_name]
             
             # Test si le profil b_i surclasse a
@@ -289,7 +305,9 @@ class ElectreTri:
 
 def electre_sorting(df: pd.DataFrame, 
                    config_path: str = "config/electre.yml",
-                   variant: str = "pessimistic") -> pd.Series:
+                   variant: str = "pessimistic",
+                   lambda_threshold: Optional[float] = None,
+                   custom_weights: Optional[Dict[str, float]] = None) -> pd.Series:
     """
     Applique ELECTRE TRI à un DataFrame entier.
     
@@ -297,6 +315,8 @@ def electre_sorting(df: pd.DataFrame,
         df: DataFrame avec les données
         config_path: Chemin vers la configuration ELECTRE
         variant: "pessimistic" ou "optimistic"
+        lambda_threshold: Seuil lambda personnalisé (optionnel)
+        custom_weights: Poids personnalisés des critères (optionnel)
         
     Returns:
         Série avec les classes assignées
@@ -305,6 +325,25 @@ def electre_sorting(df: pd.DataFrame,
     
     # Initialiser ELECTRE TRI
     electre = ElectreTri(config_path)
+    
+    # Appliquer le lambda personnalisé si fourni
+    if lambda_threshold is not None:
+        if not (0 < lambda_threshold <= 1):
+            raise ValueError(f"Lambda doit être entre 0 et 1, reçu : {lambda_threshold}")
+        electre.params['lambda'] = lambda_threshold
+        logger.info(f"Lambda personnalisé appliqué : {lambda_threshold}")
+    
+    # Appliquer les poids personnalisés si fournis
+    if custom_weights is not None:
+        # Valider et normaliser les poids personnalisés
+        total_weight = sum(custom_weights.values())
+        if total_weight <= 0:
+            raise ValueError("La somme des poids personnalisés doit être positive")
+        
+        # Normaliser et appliquer
+        normalized_weights = {k: v/total_weight for k, v in custom_weights.items()}
+        electre.params['weights'].update(normalized_weights)
+        logger.info(f"Poids personnalisés appliqués : {normalized_weights}")
     
     # Appliquer la classification
     classifications = df.apply(
@@ -323,7 +362,9 @@ def electre_sorting(df: pd.DataFrame,
 
 def classify_single_product(criteria_values: Dict[str, float],
                           config_path: str = "config/electre.yml", 
-                          variant: str = "pessimistic") -> Dict[str, any]:
+                          variant: str = "pessimistic",
+                          lambda_threshold: Optional[float] = None,
+                          custom_weights: Optional[Dict[str, float]] = None) -> Dict[str, any]:
     """
     Classe un produit individuel avec ELECTRE TRI.
     
@@ -331,11 +372,31 @@ def classify_single_product(criteria_values: Dict[str, float],
         criteria_values: Dictionnaire {critère: valeur}
         config_path: Chemin vers la configuration
         variant: Variante ELECTRE TRI
+        lambda_threshold: Seuil lambda personnalisé (optionnel)
+        custom_weights: Poids personnalisés des critères (optionnel)
         
     Returns:
         Dictionnaire avec classe et détails
     """
     electre = ElectreTri(config_path)
+    
+    # Appliquer le lambda personnalisé si fourni
+    if lambda_threshold is not None:
+        if not (0 < lambda_threshold <= 1):
+            raise ValueError(f"Lambda doit être entre 0 et 1, reçu : {lambda_threshold}")
+        electre.params['lambda'] = lambda_threshold
+    
+    # Appliquer les poids personnalisés si fournis
+    if custom_weights is not None:
+        # Valider et normaliser les poids personnalisés
+        total_weight = sum(custom_weights.values())
+        if total_weight <= 0:
+            raise ValueError("La somme des poids personnalisés doit être positive")
+        
+        # Normaliser et appliquer
+        normalized_weights = {k: v/total_weight for k, v in custom_weights.items()}
+        electre.params['weights'].update(normalized_weights)
+        logger.info(f"Poids personnalisés appliqués : {normalized_weights}")
     
     try:
         assigned_class = electre.classify_alternative(criteria_values, variant)

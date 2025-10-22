@@ -185,6 +185,87 @@ def main():
         
         if electre_config:
             st.success("Configuration ELECTRE chargée ✅")
+            
+            st.divider()
+            st.subheader("🎛️ Paramètres ELECTRE TRI")
+            
+            # Sélection de variante
+            variant = st.selectbox(
+                "Variante ELECTRE TRI", 
+                ["pessimistic", "optimistic"], 
+                index=0,
+                help="Pessimiste: classement prudent, Optimiste: classement favorable"
+            )
+            
+            # Paramètre lambda
+            current_lambda = electre_config.get('lambda', 0.7)
+            lambda_val = st.slider(
+                "Seuil lambda", 
+                min_value=0.5, 
+                max_value=1.0, 
+                value=current_lambda, 
+                step=0.05,
+                help="Seuil de concordance pour le surclassement"
+            )
+            
+            # Modification des poids des critères
+            st.write("**Configuration des poids:**")
+            use_custom_weights = st.checkbox(
+                "Modifier les poids des critères", 
+                value=False,
+                help="Cocher pour personnaliser les poids (seront normalisés automatiquement)"
+            )
+            
+            custom_weights = None
+            if use_custom_weights:
+                with st.expander("⚖️ Ajuster les poids des critères", expanded=True):
+                    st.write("*Les poids seront normalisés automatiquement pour sommer à 1*")
+                    
+                    weights = electre_config.get('weights', {})
+                    custom_weights = {}
+                    
+                    # Organiser les critères par type
+                    cost_criteria = ['energy_100g', 'saturated_fat_100g', 'sugars_100g', 'sodium_100g', 'additives_count']
+                    benefit_criteria = ['proteins_100g', 'fiber_100g', 'fruits_veg_nuts_percent']
+                    
+                    st.write("**🔴 Éléments à limiter:**")
+                    for criterion in cost_criteria:
+                        if criterion in weights:
+                            label = criterion.replace('_', ' ').replace('100g', '(100g)').title()
+                            custom_weights[criterion] = st.slider(
+                                label,
+                                min_value=0.01,
+                                max_value=1.0,
+                                value=float(weights[criterion]),
+                                step=0.01,
+                                key=f"weight_{criterion}"
+                            )
+                    
+                    st.write("**🟢 Éléments favorables:**")
+                    for criterion in benefit_criteria:
+                        if criterion in weights:
+                            label = criterion.replace('_', ' ').replace('100g', '(100g)').replace('percent', '(%)').title()
+                            custom_weights[criterion] = st.slider(
+                                label,
+                                min_value=0.01,
+                                max_value=1.0,
+                                value=float(weights[criterion]),
+                                step=0.01,
+                                key=f"weight_{criterion}"
+                            )
+                    
+                    # Afficher les poids normalisés en temps réel
+                    if custom_weights:
+                        total_weight = sum(custom_weights.values())
+                        st.write("**Poids normalisés (aperçu):**")
+                        for criterion, weight in custom_weights.items():
+                            normalized = weight / total_weight
+                            st.write(f"- {criterion.replace('_', ' ')}: {normalized:.3f}")
+            else:
+                with st.expander("📊 Poids actuels des critères"):
+                    weights = electre_config.get('weights', {})
+                    for criterion, weight in weights.items():
+                        st.write(f"- {criterion.replace('_', ' ').title()}: {weight:.3f}")
         else:
             st.error("Configuration ELECTRE non disponible ❌")
     
@@ -248,34 +329,27 @@ def main():
                 st.info(f"**Valeurs converties:** Énergie = {energy_kj:.1f} kJ, Sodium = {sodium_mg:.1f} mg")
         
         with col2:
-            st.subheader("🎛️ Paramètres ELECTRE TRI")
+            st.subheader("📊 État de la configuration")
             
             if electre_config:
-                # Sélection de variante
-                variant = st.selectbox(
-                    "Variante ELECTRE TRI", 
-                    ["pessimistic", "optimistic"], 
-                    index=0,
-                    help="Pessimiste: classement prudent, Optimiste: classement favorable"
-                )
+                st.success("✅ Configuration ELECTRE chargée")
                 
-                # Paramètre lambda
-                current_lambda = electre_config.get('lambda', 0.7)
-                lambda_val = st.slider(
-                    "Seuil lambda", 
-                    min_value=0.5, 
-                    max_value=1.0, 
-                    value=current_lambda, 
-                    step=0.05,
-                    help="Seuil de concordance pour le surclassement"
-                )
+                # Afficher un résumé des paramètres actuels
+                st.info(f"""
+                **Paramètres actuels (sidebar):**
+                - Variante: {variant}
+                - Lambda: {lambda_val}
+                - Poids personnalisés: {'✅ Oui' if custom_weights else '❌ Non'}
+                """)
                 
-                # Modification des poids (optionnel)
-                with st.expander("Modifier les poids des critères"):
-                    st.write("Poids actuels (normalisés automatiquement):")
-                    weights = electre_config.get('weights', {})
-                    for criterion, weight in weights.items():
-                        st.write(f"- {criterion}: {weight:.3f}")
+                if custom_weights:
+                    total_weight = sum(custom_weights.values())
+                    with st.expander("Poids personnalisés"):
+                        for criterion, weight in custom_weights.items():
+                            normalized = weight / total_weight
+                            st.write(f"- {criterion.replace('_', ' ')}: {normalized:.3f}")
+            else:
+                st.error("❌ Configuration ELECTRE non disponible")
         
         # Boutons de calcul
         col1, col2 = st.columns(2)
@@ -315,13 +389,16 @@ def main():
                         'additives_count': 0  # Par défaut
                     }
                     
-                    # Classification ELECTRE TRI
+                    # Classification ELECTRE TRI avec paramètres personnalisés
                     electre_result = classify_single_product(
                         criteria_values, 
-                        variant=variant
+                        variant=variant,
+                        lambda_threshold=lambda_val,
+                        custom_weights=custom_weights
                     )
                     
                     st.success(f"Classification ELECTRE TRI ({variant}) terminée !")
+                    st.info(f"Paramètres utilisés: Lambda = {lambda_val}, Poids personnalisés = {'Oui' if custom_weights else 'Non'}")
                     display_electre_result(electre_result)
                     
                 except Exception as e:
@@ -441,28 +518,37 @@ def main():
             
             with col2:
                 if st.button("🎯 Appliquer ELECTRE TRI", type="secondary"):
-                    # Sélection de la variante
-                    variant_choice = st.selectbox("Variante", ["pessimistic", "optimistic"])
-                    
-                    with st.spinner(f"Classification ELECTRE TRI ({variant_choice})..."):
-                        try:
-                            classifications = electre_sorting(df, variant=variant_choice)
-                            
-                            df_with_electre = df.copy()
-                            df_with_electre['electre_cat'] = classifications
-                            st.session_state.df_processed = df_with_electre
-                            
-                            # Statistiques
-                            class_dist = classifications.value_counts()
-                            
-                            st.success(f"✅ ELECTRE TRI ({variant_choice}) appliqué !")
-                            
-                            st.write("**Distribution des classes:**")
-                            for classe, count in class_dist.items():
-                                st.write(f"- {classe}: {count}")
-                            
-                        except Exception as e:
-                            st.error(f"Erreur ELECTRE TRI : {e}")
+                    if not electre_config:
+                        st.error("Configuration ELECTRE non disponible")
+                    else:
+                        with st.spinner(f"Classification ELECTRE TRI ({variant})..."):
+                            try:
+                                # Utiliser les paramètres de la sidebar
+                                classifications = electre_sorting(
+                                    df, 
+                                    variant=variant,
+                                    lambda_threshold=lambda_val,
+                                    custom_weights=custom_weights
+                                )
+                                
+                                df_with_electre = df.copy()
+                                df_with_electre['electre_cat'] = classifications
+                                st.session_state.df_processed = df_with_electre
+                                
+                                # Statistiques
+                                class_dist = classifications.value_counts()
+                                
+                                st.success(f"✅ ELECTRE TRI ({variant}) appliqué !")
+                                st.info(f"Lambda = {lambda_val}, Poids personnalisés = {'Oui' if custom_weights else 'Non'}")
+                                
+                                st.write("**Distribution des classes:**")
+                                for classe, count in class_dist.items():
+                                    st.write(f"- {classe}: {count}")
+                                
+                            except Exception as e:
+                                st.error(f"Erreur ELECTRE TRI : {e}")
+                                import traceback
+                                st.code(traceback.format_exc())
             
             with col3:
                 # Vérifier si les deux colonnes sont présentes
