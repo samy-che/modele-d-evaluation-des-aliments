@@ -13,6 +13,10 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+
+#streamlit run c:/Users/alila/Desktop/Projet_transparence/modele-d-evaluation-des-aliments/app/ui_streamlit.py         
+
+
 # Ajouter le répertoire parent au path pour les imports
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir.parent))
