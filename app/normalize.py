@@ -26,9 +26,11 @@ class DataNormalizer:
             Tuple (valeur, unité)
         """
         if pd.isna(energy_str):
+            # Valeur manquante : conserver un NaN et choisir kJ comme unité neutre
             return np.nan, 'kJ'
         
         energy_str = str(energy_str).lower().replace(' ', '').replace(',', '.')
+        # Prépare la chaîne pour une analyse robuste (casse, espaces, virgules)
         
         # Chercher kcal en premier
         if 'kcal' in energy_str:
@@ -36,6 +38,7 @@ class DataNormalizer:
             import re
             match = re.search(r'(\d+\.?\d*)\s*kcal', energy_str)
             if match:
+                # Le motif récupère la première valeur décimale immédiatement avant l'unité
                 return float(match.group(1)), 'kcal'
         
         # Chercher kj
@@ -43,11 +46,13 @@ class DataNormalizer:
             import re
             match = re.search(r'(\d+\.?\d*)\s*kj', energy_str)
             if match:
+                # Même logique pour le kilojoule : un seul nombre doit être interprété
                 return float(match.group(1)), 'kJ'
         
         # Essayer de parser comme nombre pur
         try:
-            return float(energy_str), 'kJ'  # Supposer kJ par défaut
+            # Si aucune unité n'est donnée, on suppose un enregistrement en kJ
+            return float(energy_str), 'kJ'
         except ValueError:
             logger.warning(f"Impossible de parser l'énergie : {energy_str}")
             return np.nan, 'kJ'
@@ -68,10 +73,12 @@ class DataNormalizer:
             return np.nan
         
         weight_str = str(weight_str).lower().replace(' ', '').replace(',', '.')
+        # Mise en forme identique pour toutes les chaînes afin d'éviter les erreurs liées au formatage
         
         # Extraire tous les nombres de la chaîne
         import re
         numbers = re.findall(r'(\d+\.?\d*)', weight_str)
+        # On se base sur la première valeur trouvée, les fiches produits ne fournissant en général qu'une mesure
         
         if numbers:
             value = float(numbers[0])
@@ -113,6 +120,7 @@ class DataNormalizer:
             return np.nan
         
         percent_str = str(percent_str).replace(' ', '').replace(',', '.')
+        # On retire les espaces et remplace les virgules pour faciliter la détection numérique
         
         import re
         # Chercher un nombre avec ou sans %
@@ -150,6 +158,7 @@ class DataNormalizer:
         
         # Calculer la médiane pour éviter les outliers
         median_value = valid_values.median()
+        # La médiane lisse les valeurs aberrantes, fréquentes dans des jeux de données bruyants
         
         # Heuristique : si la médiane < 1000, probablement en kcal
         # Sinon probablement en kJ
@@ -206,6 +215,7 @@ class DataNormalizer:
             DataFrame avec énergie normalisée en kJ
         """
         df = df.copy()
+        # On évite de modifier le DataFrame original pour préserver les données sources
         
         if energy_col not in df.columns:
             logger.warning(f"Colonne {energy_col} non trouvée")
@@ -226,6 +236,7 @@ class DataNormalizer:
                 return value
         
         df[energy_col] = df[energy_col].apply(parse_and_convert_energy)
+        # Les conversions sont appliquées ligne par ligne pour tirer parti des règles de parsing ci-dessus
         
         logger.info(f"Énergie normalisée en kJ pour {energy_col}")
         return df
@@ -246,6 +257,7 @@ class DataNormalizer:
             DataFrame avec sodium normalisé en mg
         """
         df = df.copy()
+        # Normaliser sur une copie évite des effets de bord si l'appelant réutilise le DataFrame initial
         
         # Si pas de colonne sodium mais colonne sel disponible
         if sodium_col not in df.columns and salt_col and salt_col in df.columns:
@@ -259,6 +271,7 @@ class DataNormalizer:
                 if median_sodium < 10:  # Probablement en grammes
                     logger.info(f"Conversion sel(g) -> sodium(mg) pour {sodium_col}")
                     df[sodium_col] = df[sodium_col].apply(DataNormalizer.salt_to_sodium)
+                # Sinon les valeurs sont déjà exprimées en mg et ne nécessitent aucun ajustement
         
         return df
     
@@ -276,6 +289,7 @@ class DataNormalizer:
             DataFrame avec pourcentages nettoyés
         """
         df = df.copy()
+        # Le clipping doit également se faire sur une copie pour éviter les modifications surprises
         
         if percent_col not in df.columns:
             logger.warning(f"Colonne {percent_col} non trouvée")
@@ -285,6 +299,7 @@ class DataNormalizer:
         
         # Clipper les valeurs entre 0 et 100
         df[percent_col] = df[percent_col].clip(0, 100)
+        # La taille du DataFrame reste inchangée : seules les valeurs hors bornes sont rabattues
         
         # Compter les modifications
         out_of_range_count = len(df) - original_count
@@ -307,6 +322,7 @@ class DataNormalizer:
             DataFrame avec valeurs négatives nettoyées
         """
         df = df.copy()
+        # On travaille sur une copie afin de n'impacter que le résultat renvoyé
         
         if numeric_columns is None:
             numeric_columns = [
@@ -314,6 +330,7 @@ class DataNormalizer:
                 'sodium_100g', 'proteins_100g', 'fiber_100g',
                 'fruits_veg_nuts_percent'
             ]
+            # Liste par défaut des nutriments suivis par Nutri-Score
         
         negative_counts = {}
         
@@ -351,6 +368,7 @@ class DataNormalizer:
             Tuple (DataFrame traité, statistiques des suppressions)
         """
         df = df.copy()
+        # Chaque stratégie peut modifier le DataFrame : travailler sur une copie apporte de la sécurité
         original_rows = len(df)
         stats = {'dropped_rows': 0, 'dropped_columns': 0, 'filled_values': 0}
         
@@ -359,6 +377,7 @@ class DataNormalizer:
             'energy_100g', 'saturated_fat_100g', 'sugars_100g', 
             'sodium_100g', 'proteins_100g', 'fiber_100g'
         ]
+        # Ces colonnes sont prioritaires : elles conditionnent le calcul du score final
         
         if strategy == 'drop_row':
             # Supprimer les lignes avec des valeurs manquantes dans les colonnes critiques
@@ -372,6 +391,7 @@ class DataNormalizer:
             for col in df.columns:
                 non_null_ratio = df[col].count() / len(df)
                 if non_null_ratio < threshold and col not in critical_columns:
+                    # On ne supprime pas les colonnes indispensables, même si elles sont très incomplètes
                     df = df.drop(columns=[col])
                     stats['dropped_columns'] += 1
                     
@@ -381,6 +401,7 @@ class DataNormalizer:
                 if col in df.columns:
                     missing_count = df[col].isnull().sum()
                     if missing_count > 0:
+                        # Remplacer par zéro est adapté aux nutriments défavorables (gras, sucre, sel)
                         df[col] = df[col].fillna(0)
                         stats['filled_values'] += missing_count
                         
@@ -391,6 +412,7 @@ class DataNormalizer:
                     missing_count = df[col].isnull().sum()
                     if missing_count > 0:
                         median_val = df[col].median()
+                        # La médiane limite l'impact des valeurs extrêmes en conservant l'échelle originale
                         df[col] = df[col].fillna(median_val)
                         stats['filled_values'] += missing_count
         
@@ -416,6 +438,7 @@ class DataNormalizer:
             DataFrame avec colonnes parsées
         """
         df_parsed = df.copy()
+        # Copie défensive : plusieurs colonnes sont transformées en parallèle
         
         # Colonnes à parser selon leur type
         numeric_columns = {
@@ -437,8 +460,10 @@ class DataNormalizer:
                     continue
                 elif parse_type == 'weight':
                     is_sodium = (col == 'sodium_100g')
+                    # Sodium traité à part pour conserver l'unité mg en interne
                     df_parsed[col] = df_parsed[col].apply(lambda x: DataNormalizer.parse_weight_string(x, is_sodium))
                 elif parse_type == 'percentage':
+                    # Les pourcentages sont uniformisés sur une échelle 0-100
                     df_parsed[col] = df_parsed[col].apply(DataNormalizer.parse_percentage_string)
                 
                 # Compter les valeurs réussies
@@ -471,9 +496,11 @@ class DataNormalizer:
             'final_rows': 0,
             'issues_found': {}
         }
+        # Rapport cumulant les étapes réalisées et les incidents détectés pendant la normalisation
         
         # 0. Parsing des colonnes avec chaînes
         try:
+            # Étape initiale : traduire toutes les colonnes texte en valeurs numériques homogènes
             df_normalized = DataNormalizer.parse_all_numeric_columns(df_normalized)
             report['steps_applied'].append('string_parsing')
         except Exception as e:
@@ -482,6 +509,7 @@ class DataNormalizer:
         
         # 1. Normalisation de l'énergie
         try:
+            # Harmoniser l'énergie en kJ pour éviter les mélanges d'unités
             df_normalized = DataNormalizer.normalize_energy(df_normalized, force_unit=energy_unit)
             report['steps_applied'].append('energy_normalization')
         except Exception as e:
@@ -497,6 +525,7 @@ class DataNormalizer:
         
         # 4. Nettoyage des valeurs négatives
         try:
+            # Les valeurs négatives (souvent issues d'erreurs de saisie) sont remises à zéro
             df_normalized = DataNormalizer.clean_negative_values(df_normalized)
             report['steps_applied'].append('negative_values_cleaning')
         except Exception as e:
@@ -505,6 +534,7 @@ class DataNormalizer:
         
         # 5. Gestion des valeurs manquantes
         try:
+            # Choix de stratégie configurable : suppression ou imputation des données manquantes
             df_normalized, missing_stats = DataNormalizer.handle_missing_values(
                 df_normalized, strategy=missing_strategy
             )
@@ -516,7 +546,8 @@ class DataNormalizer:
         
         report['final_rows'] = len(df_normalized)
         report['rows_removed'] = report['original_rows'] - report['final_rows']
-        
+        # Permet de visualiser l'impact global du nettoyage sur la volumétrie
+       
         logger.info(f"Normalisation terminée : {report['original_rows']} -> {report['final_rows']} lignes")
         
         return df_normalized, report
@@ -536,6 +567,7 @@ def normalize_data(df: pd.DataFrame,
     Returns:
         Tuple (DataFrame normalisé, rapport)
     """
+    # Point d'entrée simplifié pour le reste de l'application
     return DataNormalizer.full_normalization(df, energy_unit, missing_strategy)
 
 
@@ -546,6 +578,7 @@ if __name__ == "__main__":
     from app.io import load_data
     
     try:
+        # Vérifie rapidement que la pipeline fonctionne avec les données réelles
         # Charger les données
         df, _, _ = load_data()
         print(f"Données chargées : {len(df)} lignes")

@@ -1,16 +1,16 @@
 # Configuration ELECTRE TRI pour classement des produits alimentaires
 # Basé sur les critères nutritionnels
 
-# Poids des critères (normalisés dans le code)
+# Poids des critères
 weights:
-  energy_100g: 0.18        # Énergie (coût)
-  saturated_fat_100g: 0.16 # AG saturés (coût) 
-  sugars_100g: 0.15        # Sucres (coût)
-  sodium_100g: 0.14        # Sodium (coût)
-  proteins_100g: 0.13      # Protéines (bénéfice)
-  fiber_100g: 0.12         # Fibres (bénéfice)
-  fruits_veg_nuts_percent: 0.12  # Fruits/légumes/noix (bénéfice)
-  additives_count: 0.10    # Additifs (coût) - optionnel
+  energy_100g: 0.10         # Énergie (coût)
+  saturated_fat_100g: 0.14  # AG saturés (coût)
+  sugars_100g: 0.14         # Sucres (coût)
+  sodium_100g: 0.13         # Sodium (coût)
+  proteins_100g: 0.12       # Protéines (bénéfice)
+  fiber_100g: 0.11          # Fibres (bénéfice)
+  fruits_veg_nuts_percent: 0.11  # Fruits/légumes/noix (bénéfice)
+  additives_count: 0.15     # Additifs (coût)
 
 # Direction des critères (-1 = coût à minimiser, +1 = bénéfice à maximiser)
 directions:
