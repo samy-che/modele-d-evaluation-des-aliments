@@ -379,6 +379,11 @@ def main():
                 # Fruits/légumes/noix
                 fruits_veg = st.number_input("Fruits/légumes/noix (%)", min_value=0.0, max_value=100.0, value=30.0, step=5.0)
             
+            # Nouveau champ pour le nombre d'additifs (critère à minimiser)
+            st.write("**Additifs:**")
+            additives = st.number_input("Nombre d'additifs", min_value=0, max_value=50, value=0, step=1, 
+                                       help="Nombre d'additifs présents dans le produit (critère à minimiser pour ELECTRE TRI)")
+            
             # Conversions d'unités
             is_kcal = energy_unit == "kcal"
             is_salt = "Sel" in sodium_unit
@@ -456,7 +461,7 @@ def main():
                         'proteins_100g': proteins,                # Protéines en g
                         'fiber_100g': fiber,                      # Fibres en g
                         'fruits_veg_nuts_percent': fruits_veg,    # % fruits/légumes/noix
-                        'additives_count': 0                      # Nombre d'additifs (défaut)
+                        'additives_count': additives              # Nombre d'additifs (saisi par l'utilisateur)
                     }
                     
                     # Appeler la fonction de classification avec les paramètres personnalisés
