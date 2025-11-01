@@ -13,6 +13,7 @@ import os              # Pour les opérations sur le système de fichiers
 import logging         # Pour enregistrer les logs et messages de débogage
 from pathlib import Path  # Pour gérer les chemins de fichiers de manière portable
 from typing import Dict, Any, Optional  # Pour les annotations de types
+from utils.paths import get_config_path
 
 # Configurer le chemin d'importation pour accéder aux modules locaux
 current_dir = Path(__file__).parent  # Obtenir le répertoire du fichier actuel
@@ -83,8 +84,10 @@ st.markdown("""
 
 # Définition des fonctions utilitaires avec mise en cache Streamlit
 @st.cache_data  # Décorateur pour mettre en cache les résultats et éviter de recharger inutilement
-def load_electre_config(config_path: str = "config/electre.yml") -> Dict[str, Any]:
+def load_electre_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Charge la configuration ELECTRE avec cache."""
+    config_path = config_path or get_config_path("config/electre.yml")
+
     try:
         # Ouvrir et lire le fichier de configuration ELECTRE en UTF-8
         with open(config_path, 'r', encoding='utf-8') as f:

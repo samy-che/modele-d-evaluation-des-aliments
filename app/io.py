@@ -7,6 +7,7 @@ import yaml
 import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
+from utils.paths import get_config_path
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -15,14 +16,14 @@ logger = logging.getLogger(__name__)
 class ExcelDataLoader:
     """Classe pour charger et mapper les données Excel selon la configuration."""
     
-    def __init__(self, config_path: str = "config/columns.yml"):
+    def __init__(self, config_path: str = None):
         """
         Initialise le loader avec le fichier de configuration.
         
         Args:
             config_path: Chemin vers le fichier de configuration YAML
         """
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path or get_config_path("config/columns.yml"))
         self.column_mapping = self._load_column_config()
     
     def _load_column_config(self) -> Dict[str, List[str]]:
@@ -226,7 +227,7 @@ class ExcelDataLoader:
 
 
 def load_data(excel_path: str = "data/produits.xlsx", 
-              config_path: str = "config/columns.yml") -> Tuple[pd.DataFrame, Dict[str, str], Dict[str, any]]:
+              config_path: Optional[str] = None) -> Tuple[pd.DataFrame, Dict[str, str], Dict[str, any]]:
     """
     Fonction utilitaire pour charger les données avec validation.
     
@@ -237,6 +238,7 @@ def load_data(excel_path: str = "data/produits.xlsx",
     Returns:
         Tuple (DataFrame, mapping_info, quality_report)
     """
+    config_path = config_path or get_config_path("config/columns.yml")
     loader = ExcelDataLoader(config_path)
     df, mapping_info = loader.load_excel_data(excel_path)
     quality_report = loader.validate_data_quality(df)

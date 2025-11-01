@@ -10,6 +10,7 @@ import yaml         # Pour lire les fichiers de configuration YAML
 import logging      # Pour enregistrer les logs et messages de débogage
 from typing import Dict, List, Tuple, Optional  # Pour les annotations de types
 from pathlib import Path  # Pour gérer les chemins de fichiers de manière portable
+from utils.paths import get_config_path
 
 # Configuration du système de logging pour tracer l'exécution
 logger = logging.getLogger(__name__)  # Créer un logger spécifique à ce module
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)  # Créer un logger spécifique à ce modul
 class ElectreTri:
     """Classe d'implémentation ELECTRE TRI-B avec profils limites."""
     
-    def __init__(self, config_path: str = "config/electre.yml"):
+    def __init__(self, config_path: str = None):
         """
         Initialise ELECTRE TRI avec les paramètres de configuration.
         
@@ -25,7 +26,7 @@ class ElectreTri:
             config_path: Chemin vers le fichier de configuration ELECTRE
         """
         # Convertir le chemin en objet Path pour une manipulation sûre
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path or get_config_path("config/electre.yml"))
         # Charger les paramètres depuis le fichier de configuration
         self.params = self._load_config()
         # Valider que tous les paramètres requis sont présents et cohérents
@@ -371,7 +372,7 @@ class ElectreTri:
 
 
 def electre_sorting(df: pd.DataFrame, 
-                   config_path: str = "config/electre.yml",
+                   config_path: Optional[str] = None,
                    variant: str = "pessimistic",
                    lambda_threshold: Optional[float] = None,
                    custom_weights: Optional[Dict[str, float]] = None) -> pd.Series:
@@ -388,6 +389,8 @@ def electre_sorting(df: pd.DataFrame,
     Returns:
         Série avec les classes assignées
     """
+    config_path = config_path or get_config_path("config/electre.yml")
+
     # Enregistrer le début du processus de classification dans les logs
     logger.info(f"Application ELECTRE TRI ({variant}) à {len(df)} alternatives")
     
@@ -436,7 +439,7 @@ def electre_sorting(df: pd.DataFrame,
 
 
 def classify_single_product(criteria_values: Dict[str, float],
-                          config_path: str = "config/electre.yml", 
+                          config_path: Optional[str] = None, 
                           variant: str = "pessimistic",
                           lambda_threshold: Optional[float] = None,
                           custom_weights: Optional[Dict[str, float]] = None) -> Dict[str, any]:
@@ -453,6 +456,7 @@ def classify_single_product(criteria_values: Dict[str, float],
     Returns:
         Dictionnaire avec classe et détails
     """
+    config_path = config_path or get_config_path("config/electre.yml")
     # Créer une instance d'ELECTRE TRI avec la configuration spécifiée
     electre = ElectreTri(config_path)
     
