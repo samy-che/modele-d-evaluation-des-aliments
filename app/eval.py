@@ -28,6 +28,11 @@ class NutriScoreElectreEvaluator:
         self.nutriscore_mapping = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, 'N/A': np.nan, 'ERROR': np.nan}
         self.electre_mapping = {'A\'': 1, 'B\'': 2, 'C\'': 3, 'D\'': 4, 'E\'': 5, 'N/A': np.nan, 'ERROR': np.nan}
         
+        # Mapping pour convertir ELECTRE vers Nutri-Score (pour comparaison directe)
+        self.electre_to_nutri = {
+            'A\'': 'A', 'B\'': 'B', 'C\'': 'C', 'D\'': 'D', 'E\'': 'E'
+        }
+        
         # Labels ordonnés
         self.nutriscore_labels = ['A', 'B', 'C', 'D', 'E']
         self.electre_labels = ['A\'', 'B\'', 'C\'', 'D\'', 'E\'']
@@ -110,17 +115,28 @@ class NutriScoreElectreEvaluator:
         nutriscore_values = df_clean[nutriscore_col]
         electre_values = df_clean[electre_col]
         
+        # Mapper les labels ELECTRE vers le format Nutri-Score pour la comparaison
+        electre_mapped = electre_values.map(self.electre_to_nutri)
+        
+        # Déterminer les labels uniques présents dans les données
+        nutri_unique = sorted([l for l in nutriscore_values.unique() if l in self.nutriscore_labels])
+        
+        # Si aucun label unique, utiliser les labels par défaut
+        if not nutri_unique:
+            nutri_unique = self.nutriscore_labels
+        
         # Créer la matrice de confusion
+        # Note: nutriscore (y_true) en lignes, electre (y_pred) en colonnes
         cm = confusion_matrix(
             nutriscore_values, 
-            electre_values,
-            labels=self.nutriscore_labels + [label for label in self.electre_labels if label not in nutriscore_values.unique()]
+            electre_mapped,
+            labels=nutri_unique
         )
         
         # Métadonnées
         metadata = {
-            'nutriscore_labels': self.nutriscore_labels,
-            'electre_labels': self.electre_labels,
+            'nutriscore_labels': nutri_unique,
+            'electre_labels': [l.replace('\'', '') for l in self.electre_labels if l.replace('\'', '') in nutri_unique],
             'total_samples': len(df_clean),
             'nutriscore_distribution': nutriscore_values.value_counts().to_dict(),
             'electre_distribution': electre_values.value_counts().to_dict()
@@ -229,16 +245,11 @@ class NutriScoreElectreEvaluator:
         
         # Déterminer les labels pour les axes
         nutri_labels = metadata.get('nutriscore_labels', self.nutriscore_labels)
-        electre_labels = metadata.get('electre_labels', self.electre_labels)
+        electre_labels = metadata.get('electre_labels', nutri_labels)  # Utiliser les mêmes labels
         
-        # Adapter la matrice si nécessaire
-        if confusion_mat.shape[0] != len(nutri_labels):
-            # Ajuster selon les données disponibles
-            actual_nutri_labels = nutri_labels[:confusion_mat.shape[0]]
-            actual_electre_labels = electre_labels[:confusion_mat.shape[1]]
-        else:
-            actual_nutri_labels = nutri_labels
-            actual_electre_labels = electre_labels
+        # Pour l'affichage, convertir les labels en format avec apostrophe pour ELECTRE
+        display_electre_labels = [f"{label}'" if not label.endswith("'") else label 
+                                  for label in electre_labels]
         
         # Créer la heatmap
         sns.heatmap(
@@ -246,8 +257,8 @@ class NutriScoreElectreEvaluator:
             annot=True,
             fmt='d',
             cmap='Blues',
-            xticklabels=actual_electre_labels,
-            yticklabels=actual_nutri_labels,
+            xticklabels=display_electre_labels,
+            yticklabels=nutri_labels,
             ax=ax,
             cbar_kws={'label': 'Nombre de produits'}
         )
@@ -380,6 +391,13 @@ class NutriScoreElectreEvaluator:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
+        # Créer les sous-répertoires
+        reports_path = output_path / "reports"
+        reports_path.mkdir(parents=True, exist_ok=True)
+        
+        excel_path_dir = output_path / "excel"
+        excel_path_dir.mkdir(parents=True, exist_ok=True)
+        
         # 1. Matrice de confusion
         cm, cm_metadata = self.compute_confusion_matrix(df, nutriscore_col, electre_col)
         
@@ -391,7 +409,7 @@ class NutriScoreElectreEvaluator:
             # Matrice de confusion
             confusion_fig = self.plot_confusion_matrix(
                 cm, cm_metadata, 
-                save_path=output_path / "reports" / "confusion_matrix.png"
+                save_path=reports_path / "confusion_matrix.png"
             )
             plt.close(confusion_fig)
             
@@ -399,13 +417,12 @@ class NutriScoreElectreEvaluator:
             if metrics:
                 metrics_fig = self.plot_metrics_summary(
                     metrics,
-                    save_path=output_path / "reports" / "metrics_summary.png"
+                    save_path=reports_path / "metrics_summary.png"
                 )
                 plt.close(metrics_fig)
         
         # 4. Export Excel des résultats
-        excel_path = output_path / "excel" / "dataset_avec_preds.xlsx"
-        excel_path.parent.mkdir(parents=True, exist_ok=True)
+        excel_path = excel_path_dir / "dataset_avec_preds.xlsx"
         
         df.to_excel(excel_path, index=False)
         logger.info(f"Dataset avec prédictions exporté : {excel_path}")
@@ -419,8 +436,8 @@ class NutriScoreElectreEvaluator:
                 'total_products': len(df),
                 'valid_comparisons': cm_metadata.get('total_samples', 0),
                 'files_generated': {
-                    'confusion_matrix': str(output_path / "reports" / "confusion_matrix.png"),
-                    'metrics_summary': str(output_path / "reports" / "metrics_summary.png"),
+                    'confusion_matrix': str(reports_path / "confusion_matrix.png"),
+                    'metrics_summary': str(reports_path / "metrics_summary.png"),
                     'dataset_excel': str(excel_path)
                 }
             }

@@ -546,22 +546,66 @@ def main():
                     # Afficher un message de succès avec le nombre de produits
                     st.success(f"✅ Données chargées : {len(df_processed)} produits")
                     
-                    # Afficher le rapport de qualité
-                    with st.expander("Rapport de qualité des données"):
+                    # Afficher le rapport de qualité dans un expander (replié par défaut)
+                    with st.expander("📋 Rapport de qualité des données", expanded=False):
+                        # Statistiques générales
+                        st.write("**📊 Statistiques générales**")
+                        col_stats1, col_stats2, col_stats3 = st.columns(3)
+                        with col_stats1:
+                            st.metric("Produits chargés", len(df_processed))
+                        with col_stats2:
+                            st.metric("Colonnes", len(df_processed.columns))
+                        with col_stats3:
+                            rows_removed = norm_report.get('rows_removed', 0)
+                            st.metric("Lignes supprimées", rows_removed, 
+                                     delta=f"-{rows_removed}" if rows_removed > 0 else None,
+                                     delta_color="inverse")
+                        
+                        st.markdown("---")
+                        
+                        # Mapping et normalisation en colonnes
                         col_a, col_b = st.columns(2)
                         
                         with col_a:
-                            st.write("**Mapping des colonnes:**")
+                            st.write("**🔗 Mapping des colonnes**")
+                            # Afficher dans un tableau plus compact
+                            mapping_data = []
                             for canonical, original in mapping.items():
-                                st.write(f"- {canonical} ← {original}")
+                                mapping_data.append({"Colonne standard": canonical, "Colonne source": original})
+                            if mapping_data:
+                                st.dataframe(
+                                    mapping_data, 
+                                    hide_index=True,
+                                    use_container_width=True,
+                                    height=200
+                                )
                         
                         with col_b:
-                            st.write("**Normalisation appliquée:**")
-                            for step in norm_report.get('steps_applied', []):
-                                st.write(f"✓ {step}")
+                            st.write("**✅ Normalisation appliquée**")
+                            steps = norm_report.get('steps_applied', [])
+                            if steps:
+                                for step in steps:
+                                    # Traduire les noms techniques en français
+                                    step_names = {
+                                        'string_parsing': '📝 Parsing des chaînes',
+                                        'energy_normalization': '⚡ Normalisation énergie',
+                                        'sodium_normalization_skipped': '🧂 Sodium (non normalisé)',
+                                        'percentage_cleaning_during_parsing': '📊 Nettoyage pourcentages',
+                                        'negative_values_cleaning': '🔢 Suppression valeurs négatives',
+                                        'missing_values_handling': '❓ Gestion valeurs manquantes'
+                                    }
+                                    display_name = step_names.get(step, step)
+                                    st.write(f"✓ {display_name}")
                             
-                            if norm_report.get('rows_removed', 0) > 0:
-                                st.warning(f"⚠️ {norm_report['rows_removed']} lignes supprimées")
+                            if rows_removed > 0:
+                                st.warning(f"⚠️ {rows_removed} ligne(s) supprimée(s) (valeurs manquantes critiques)")
+                        
+                        # Avertissements de qualité
+                        if quality:
+                            st.markdown("---")
+                            st.write("**⚠️ Avertissements**")
+                            for warning in quality:
+                                st.warning(warning)
         
         # Section traitement si données chargées
         if st.session_state.dataset_loaded and st.session_state.df_processed is not None:
@@ -608,10 +652,33 @@ def main():
                             # Afficher le message de succès
                             st.success("✅ Nutri-Score calculé !")
                             
-                            # Afficher la distribution des labels calculés
-                            st.write("**Distribution des labels:**")
-                            for label, count in label_dist.items():
-                                st.write(f"- {label}: {count}")
+                            # Afficher la distribution dans un format plus visuel
+                            st.write("**📊 Distribution des labels**")
+                            
+                            # Créer des colonnes pour afficher les labels
+                            label_cols = st.columns(5)
+                            labels_order = ['A', 'B', 'C', 'D', 'E']
+                            
+                            for idx, label in enumerate(labels_order):
+                                count = label_dist.get(label, 0)
+                                pct = (count / len(df_with_nutri) * 100) if len(df_with_nutri) > 0 else 0
+                                
+                                with label_cols[idx]:
+                                    # Couleur selon le label
+                                    color_map = {
+                                        'A': '🟢',
+                                        'B': '🟡', 
+                                        'C': '🟠',
+                                        'D': '🟠',
+                                        'E': '🔴'
+                                    }
+                                    icon = color_map.get(label, '⚪')
+                                    
+                                    st.metric(
+                                        f"{icon} {label}",
+                                        count,
+                                        delta=f"{pct:.1f}%"
+                                    )
                             
                         except Exception as e:
                             # Afficher l'erreur en cas de problème
@@ -648,12 +715,35 @@ def main():
                                 
                                 # Afficher les messages de succès et d'information
                                 st.success(f"✅ ELECTRE TRI ({variant}) appliqué !")
-                                st.info(f"Lambda = {lambda_val}, Poids personnalisés = {'Oui' if custom_weights else 'Non'}")
+                                st.info(f"⚙️ Lambda = {lambda_val} | Poids personnalisés = {'Oui' if custom_weights else 'Non'}")
                                 
-                                # Afficher la distribution des classes
-                                st.write("**Distribution des classes:**")
-                                for classe, count in class_dist.items():
-                                    st.write(f"- {classe}: {count}")
+                                # Afficher la distribution dans un format plus visuel
+                                st.write("**📊 Distribution des classes**")
+                                
+                                # Créer des colonnes pour afficher les classes
+                                class_cols = st.columns(5)
+                                classes_order = ["A'", "B'", "C'", "D'", "E'"]
+                                
+                                for idx, classe in enumerate(classes_order):
+                                    count = class_dist.get(classe, 0)
+                                    pct = (count / len(df_with_electre) * 100) if len(df_with_electre) > 0 else 0
+                                    
+                                    with class_cols[idx]:
+                                        # Couleur selon la classe
+                                        color_map = {
+                                            "A'": '🟢',
+                                            "B'": '🟡', 
+                                            "C'": '🟠',
+                                            "D'": '🟠',
+                                            "E'": '🔴'
+                                        }
+                                        icon = color_map.get(classe, '⚪')
+                                        
+                                        st.metric(
+                                            f"{icon} {classe}",
+                                            count,
+                                            delta=f"{pct:.1f}%"
+                                        )
                                 
                             except Exception as e:
                                 # Afficher l'erreur et la stack trace complète
@@ -686,39 +776,114 @@ def main():
                             if metrics:
                                 st.subheader("📈 Métriques de comparaison")
                                 
+                                # Métriques principales avec pourcentages
                                 col_a, col_b, col_c, col_d = st.columns(4)
                                 
+                                accuracy = metrics.get('accuracy', 0)
+                                f1_macro = metrics.get('f1_macro', 0)
+                                mae = metrics.get('mae_rank', 0)
+                                corr = metrics.get('spearman_correlation', 0)
+                                
                                 with col_a:
-                                    accuracy = metrics.get('accuracy', 0)
-                                    st.metric("Accuracy", f"{accuracy:.3f}")
+                                    st.metric(
+                                        "🎯 Accuracy (exacte)", 
+                                        f"{accuracy:.1%}",
+                                        help="Pourcentage de classifications identiques"
+                                    )
                                 
                                 with col_b:
-                                    f1_macro = metrics.get('f1_macro', 0)
-                                    st.metric("F1-Score Macro", f"{f1_macro:.3f}")
+                                    st.metric(
+                                        "📊 F1-Score (macro)", 
+                                        f"{f1_macro:.1%}",
+                                        help="Performance moyenne équilibrée"
+                                    )
                                 
                                 with col_c:
-                                    mae = metrics.get('mae_rank', 0)
-                                    st.metric("MAE (rang)", f"{mae:.3f}")
+                                    st.metric(
+                                        "📏 MAE (rang)", 
+                                        f"{mae:.2f}",
+                                        help="Erreur moyenne en niveaux"
+                                    )
                                 
                                 with col_d:
-                                    corr = metrics.get('spearman_correlation', 0)
-                                    st.metric("Corrélation", f"{corr:.3f}")
+                                    st.metric(
+                                        "🔗 Corrélation", 
+                                        f"{corr:.3f}",
+                                        help="Corrélation de Spearman (0-1)"
+                                    )
                                 
-                                # Tolérance
-                                st.write("**Accuracy avec tolérance:**")
-                                col_e, col_f = st.columns(2)
+                                # Espacer
+                                st.markdown("---")
+                                
+                                # Métriques de tolérance avec mise en forme améliorée
+                                st.write("**🎯 Concordance avec tolérance**")
+                                col_e, col_f, col_g = st.columns(3)
+                                
+                                tol1 = metrics.get('accuracy_tolerance_1', 0)
+                                tol2 = metrics.get('accuracy_tolerance_2', 0)
                                 
                                 with col_e:
-                                    tol1 = metrics.get('accuracy_tolerance_1', 0)
-                                    st.write(f"±1 niveau: {tol1:.3f}")
+                                    st.metric(
+                                        "Exacte (0 écart)",
+                                        f"{accuracy:.1%}",
+                                        help="Classification identique"
+                                    )
                                 
                                 with col_f:
-                                    tol2 = metrics.get('accuracy_tolerance_2', 0)
-                                    st.write(f"±2 niveaux: {tol2:.3f}")
+                                    st.metric(
+                                        "±1 niveau",
+                                        f"{tol1:.1%}",
+                                        delta=f"+{(tol1-accuracy):.1%}" if tol1 > accuracy else None,
+                                        help="Écart maximum de 1 niveau"
+                                    )
+                                
+                                with col_g:
+                                    st.metric(
+                                        "±2 niveaux",
+                                        f"{tol2:.1%}",
+                                        delta=f"+{(tol2-tol1):.1%}" if tol2 > tol1 else None,
+                                        help="Écart maximum de 2 niveaux"
+                                    )
+                                
+                                # Interprétation automatique
+                                st.markdown("---")
+                                st.write("**💡 Interprétation**")
+                                
+                                if accuracy >= 0.8:
+                                    st.success(f"✅ Excellente concordance ({accuracy:.1%}) - Les deux méthodes sont très alignées")
+                                elif accuracy >= 0.6:
+                                    st.info(f"✅ Bonne concordance ({accuracy:.1%}) - Les deux méthodes sont globalement cohérentes")
+                                elif accuracy >= 0.4:
+                                    st.warning(f"⚠️ Concordance modérée ({accuracy:.1%}) - Les méthodes diffèrent sur certains produits")
+                                else:
+                                    st.error(f"❌ Faible concordance ({accuracy:.1%}) - Les méthodes divergent significativement")
+                                
+                                if tol1 >= 0.9:
+                                    st.success(f"✅ {tol1:.1%} des produits sont classés à ±1 niveau - Excellent alignement !")
+                                
+                                if corr >= 0.8:
+                                    st.success(f"✅ Forte corrélation ({corr:.3f}) - Classement très similaire")
+                                elif corr >= 0.6:
+                                    st.info(f"ℹ️ Corrélation modérée ({corr:.3f}) - Classement globalement similaire")
                             
-                            # Fichiers générés
+                            # Fichiers générés et affichage des visualisations
                             files = report.get('summary', {}).get('files_generated', {})
                             if files:
+                                st.subheader("📊 Visualisations")
+                                
+                                # Afficher la matrice de confusion
+                                confusion_path = files.get('confusion_matrix', '')
+                                if confusion_path and os.path.exists(confusion_path):
+                                    st.write("**Matrice de Confusion**")
+                                    st.image(confusion_path, use_container_width=True)
+                                
+                                # Afficher le résumé des métriques
+                                metrics_path = files.get('metrics_summary', '')
+                                if metrics_path and os.path.exists(metrics_path):
+                                    st.write("**Résumé des Métriques**")
+                                    st.image(metrics_path, use_container_width=True)
+                                
+                                # Section fichiers générés
                                 st.subheader("📁 Fichiers générés")
                                 for file_type, file_path in files.items():
                                     if os.path.exists(file_path):
