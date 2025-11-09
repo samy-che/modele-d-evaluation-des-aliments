@@ -1,474 +1,350 @@
-"""
-Module de calcul du Nutri-Score officiel.
-Implémente l'algorithme officiel de calcul du score et du label Nutri-Score.
-"""
+#===========================================
+#Module NutriScore – Version Officielle 2025
+#===========================================
 
-# Import des bibliothèques nécessaires
-import pandas as pd  # Pour manipuler les données sous forme de DataFrames
-import numpy as np   # Pour les calculs numériques et la gestion des valeurs NaN
-import logging      # Pour enregistrer les logs et messages de débogage
-from typing import Union, Tuple  # Pour les annotations de types
+import pandas as pd
+import numpy as np
+import logging
+from typing import Dict, Tuple, Optional
 
-# Configuration du système de logging pour tracer l'exécution
-logger = logging.getLogger(__name__)  # Créer un logger spécifique à ce module
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
+
+
+DEFAULT_POINT_TABLES = {
+
+    
+    # Points défavorables (négatifs)
+    # Énergie (kJ/100g)
+    "energy": [
+        (335, 0), (670, 1), (1005, 2), (1340, 3), (1675, 4),
+        (2010, 5), (2345, 6), (2680, 7), (3015, 8), (3350, 9),
+        (float("inf"), 10)
+    ],
+
+    # Acides gras saturés (g/100g)
+    "saturated_fat": [
+        (1.0, 0), (2.0, 1), (3.0, 2), (4.0, 3), (5.0, 4),
+        (6.0, 5), (7.0, 6), (8.0, 7), (9.0, 8), (10.0, 9),
+        (float("inf"), 10)
+    ],
+
+    # Sucres (g/100g)
+    "sugars": [
+        (3.4, 0), (6.8, 1), (10.0, 2), (14.0, 3), (17.0, 4),
+        (20.0, 5), (24.0, 6), (27.0, 7), (31.0, 8), (34.0, 9),
+        (37.0, 10), (41.0, 11), (44.0, 12), (48.0, 13), (51.0, 14),
+        (float("inf"), 15)
+    ],
+
+    # Sel (g/100g)
+    "salt": [
+        (0.2, 0), (0.4, 1), (0.6, 2), (0.8, 3), (1.0, 4),
+        (1.2, 5), (1.4, 6), (1.6, 7), (1.8, 8), (2.0, 9),
+        (2.2, 10), (2.4, 11), (2.6, 12), (2.8, 13), (3.0, 14),
+        (3.2, 15), (3.4, 16), (3.6, 17), (3.8, 18), (4.0, 19),
+        (float("inf"), 20)
+    ],
+
+
+    # Points favorables (positifs)
+    # Protéines (g/100g)
+    "protein": [
+        (2.4, 0), (4.8, 1), (7.2, 2), (9.6, 3),
+        (12.0, 4), (14.0, 5), (17.0, 6),
+        (float("inf"), 7)
+    ],
+
+    # Fibres (g/100g)
+    "fiber": [
+        (3.0, 0), (4.1, 1), (5.2, 2), (6.3, 3),
+        (7.4, 4), (float("inf"), 5)
+    ],
+
+    # Fruits, légumes, légumineuses (%)
+    "fruits_veg": [
+        (40, 0), (60, 1), (80, 2), (float("inf"), 5)
+    ]
+}
+
+# Seuils score -> label (identiques aux précédentes versions)
+DEFAULT_THRESHOLDS = {
+    "solid": [(0, "A"), (2, "B"), (10, "C"), (18, "D"), (float("inf"), "E")],
+    "beverage": [(1, "A"), (5, "B"), (9, "C"), (13, "D"), (float("inf"), "E")]
+}
+
+
+
+def _get_points_from_table(value: float, table: list) -> int:
+    #Retourne les points associes à une valeur selon le tableau fourni.
+    if pd.isna(value):
+        return 0
+    for threshold, pts in table:
+        if value <= threshold:
+            return int(pts)
+    return int(table[-1][1])
+
+
+
+def convert_to_salt_g(value: float) -> float:
+    # Conversion automatiquement sodium (mg) ou sel (g).
+    if pd.isna(value):
+        return 0.0
+    try:
+        v = float(value)
+    except Exception:
+        return 0.0
+    if v > 5:
+        return v / 400.0
+    return v
+
+
+# Classe principale
 class NutriScoreCalculator:
-    """Classe pour calculer le Nutri-Score selon l'algorithme officiel."""
-    
-    # Tables de points officielles pour les éléments à limiter (négatifs)
-    # Table des points pour l'énergie (kJ pour 100g) - plus c'est élevé, plus c'est pénalisé
-    ENERGY_POINTS = [
-        (335, 0), (670, 1), (1005, 2), (1340, 3), (1675, 4),     # Faible énergie = 0-4 pts
-        (2010, 5), (2345, 6), (2680, 7), (3015, 8), (3350, 9), (float('inf'), 10)  # Haute énergie = 5-10 pts
-    ]
-    
-    # Table des points pour les acides gras saturés (g pour 100g)
-    SATURATED_FAT_POINTS = [
-        (1, 0), (2, 1), (3, 2), (4, 3), (5, 4),    # Faible AG saturés = 0-4 pts
-        (6, 5), (7, 6), (8, 7), (9, 8), (10, 9), (float('inf'), 10)  # Élevé AG saturés = 5-10 pts
-    ]
-    
-    # Table des points pour les sucres (g pour 100g)
-    SUGARS_POINTS = [
-        (4.5, 0), (9, 1), (13.5, 2), (18, 3), (22.5, 4),    # Faible sucre = 0-4 pts
-        (27, 5), (31, 6), (36, 7), (40, 8), (45, 9), (float('inf'), 10)  # Élevé sucre = 5-10 pts
-    ]
-    
-    # Table des points pour le sodium (mg pour 100g)
-    SODIUM_POINTS = [
-        (90, 0), (180, 1), (270, 2), (360, 3), (450, 4),     # Faible sodium = 0-4 pts
-        (540, 5), (630, 6), (720, 7), (810, 8), (900, 9), (float('inf'), 10)  # Élevé sodium = 5-10 pts
-    ]
-    
-    # Tables de points pour les éléments favorables (positifs) - réduisent le score
-    # Table des points pour les fibres (g pour 100g) - plus c'est élevé, mieux c'est
-    FIBER_POINTS = [
-        (0.9, 0), (1.9, 1), (2.8, 2), (3.7, 3), (4.7, 4), (float('inf'), 5)  # 0-5 pts positifs
-    ]
-    
-    # Table des points pour les protéines (g pour 100g) - plus c'est élevé, mieux c'est
-    PROTEIN_POINTS = [
-        (1.6, 0), (3.2, 1), (4.8, 2), (6.4, 3), (8.0, 4), (float('inf'), 5)  # 0-5 pts positifs
-    ]
-    
-    # Table des points pour les fruits/légumes/noix (% du produit)
-    FRUITS_VEG_POINTS = [
-        (40, 0), (60, 1), (80, 2), (float('inf'), 5)  # 0, 1, 2 ou 5 pts positifs selon %
-    ]
-    
-    # Tables de conversion score final -> label Nutri-Score
-    # Seuils pour les aliments solides (plus stricts)
-    SOLID_FOOD_THRESHOLDS = [
-        (-1, 'A'), (2, 'B'), (10, 'C'), (18, 'D'), (float('inf'), 'E')  # Score ≤ -1=A, ≤2=B, etc.
-    ]
-    
-    # Seuils pour les boissons (moins stricts car naturellement moins bonnes)
-    BEVERAGE_THRESHOLDS = [
-        (1, 'A'), (5, 'B'), (9, 'C'), (13, 'D'), (float('inf'), 'E')   # Score ≤1=A, ≤5=B, etc.
-    ]
-    
-    @staticmethod
-    def _get_points_from_table(value: float, points_table: list) -> int:
-        """
-        Obtient les points à partir d'une table de correspondance.
-        
-        Args:
-            value: Valeur à évaluer
-            points_table: Table de points [(seuil, points), ...]
-            
-        Returns:
-            Nombre de points
-        """
-        # Gérer les valeurs manquantes en retournant 0 points
-        if pd.isna(value):
-            return 0
-        
-        # Parcourir la table de points pour trouver le bon intervalle
-        for threshold, points in points_table:
-            # Si la valeur est inférieure ou égale au seuil, retourner les points correspondants
-            if value <= threshold:
-                return points
-        
-        # Si aucun seuil n'est trouvé, retourner les points du dernier seuil (cas extrême)
-        return points_table[-1][1]  # Valeur par défaut (dernière)
-    
-    @staticmethod
-    def compute_negative_points(energy_kj: float, 
-                               saturated_fat_g: float, 
-                               sugars_g: float, 
-                               sodium_mg: float) -> Tuple[int, dict]:
-        """
-        Calcule les points négatifs (éléments à limiter).
-        
-        Args:
-            energy_kj: Énergie en kJ pour 100g
-            saturated_fat_g: AG saturés en g pour 100g
-            sugars_g: Sucres en g pour 100g
-            sodium_mg: Sodium en mg pour 100g
-            
-        Returns:
-            Tuple (total points négatifs, détail par composant)
-        """
-        # Dictionnaire pour stocker le détail des points par composant
-        points_detail = {}
-        
-        # Calculer les points négatifs pour l'énergie en utilisant la table officielle
-        energy_points = NutriScoreCalculator._get_points_from_table(
-            energy_kj, NutriScoreCalculator.ENERGY_POINTS
-        )
-        points_detail['energy'] = energy_points  # Sauvegarder pour traçabilité
-        
-        # Calculer les points négatifs pour les acides gras saturés
-        sat_fat_points = NutriScoreCalculator._get_points_from_table(
-            saturated_fat_g, NutriScoreCalculator.SATURATED_FAT_POINTS
-        )
-        points_detail['saturated_fat'] = sat_fat_points  # Sauvegarder pour traçabilité
-        
-        # Calculer les points négatifs pour les sucres
-        sugar_points = NutriScoreCalculator._get_points_from_table(
-            sugars_g, NutriScoreCalculator.SUGARS_POINTS
-        )
-        points_detail['sugars'] = sugar_points  # Sauvegarder pour traçabilité
-        
-        # Calculer les points négatifs pour le sodium
-        sodium_points = NutriScoreCalculator._get_points_from_table(
-            sodium_mg, NutriScoreCalculator.SODIUM_POINTS
-        )
-        points_detail['sodium'] = sodium_points  # Sauvegarder pour traçabilité
-        
-        # Calculer le total des points négatifs (somme de tous les éléments défavorables)
-        total_negative = energy_points + sat_fat_points + sugar_points + sodium_points
-        
-        # Retourner le total et le détail pour traçabilité
-        return total_negative, points_detail
-    
-    @staticmethod
-    def compute_positive_points(fiber_g: float, 
-                               protein_g: float, 
-                               fruits_veg_nuts_percent: float,
-                               negative_points: int) -> Tuple[int, dict]:
-        """
-        Calcule les points positifs (éléments favorables).
-        
-        Args:
-            fiber_g: Fibres en g pour 100g
-            protein_g: Protéines en g pour 100g
-            fruits_veg_nuts_percent: % fruits/légumes/noix
-            negative_points: Points négatifs pour appliquer la règle des protéines
-            
-        Returns:
-            Tuple (total points positifs, détail par composant)
-        """
-        # Dictionnaire pour stocker le détail des points par composant
-        points_detail = {}
-        
-        # Calculer les points positifs pour les fibres (toujours comptabilisées)
-        fiber_points = NutriScoreCalculator._get_points_from_table(
-            fiber_g, NutriScoreCalculator.FIBER_POINTS
-        )
-        points_detail['fiber'] = fiber_points  # Sauvegarder pour traçabilité
-        
-        # Calculer les points positifs pour les fruits/légumes/noix (toujours comptabilisés)
-        fruits_points = NutriScoreCalculator._get_points_from_table(
-            fruits_veg_nuts_percent, NutriScoreCalculator.FRUITS_VEG_POINTS
-        )
-        points_detail['fruits_veg_nuts'] = fruits_points  # Sauvegarder pour traçabilité
-        
-        # Calculer les points protéines de base selon la table officielle
-        protein_points = NutriScoreCalculator._get_points_from_table(
-            protein_g, NutriScoreCalculator.PROTEIN_POINTS
-        )
-        
-        # Appliquer la règle officielle spéciale pour les protéines
-        # Si points négatifs >= 11 ET fruits/légumes < 80%, ne pas compter les protéines
-        if negative_points >= 11 and fruits_veg_nuts_percent < 80:
-            protein_points = 0  # Annuler les points protéines
-            points_detail['protein'] = 0  # Sauvegarder la valeur finale
-            points_detail['protein_rule_applied'] = True  # Indiquer que la règle est appliquée
-            # Enregistrer l'application de la règle dans les logs pour traçabilité
-            logger.debug(f"Règle protéines appliquée : points négatifs={negative_points}, "
-                        f"fruits={fruits_veg_nuts_percent}%")
-        else:
-            # Garder les points protéines normaux si la règle ne s'applique pas
-            points_detail['protein'] = protein_points
-            points_detail['protein_rule_applied'] = False  # Indiquer que la règle n'est pas appliquée
-        
-        # Calculer le total des points positifs (fibres + protéines + fruits/légumes)
-        total_positive = fiber_points + protein_points + fruits_points
-        
-        # Retourner le total et le détail pour traçabilité
-        return total_positive, points_detail
-    
-    @staticmethod
-    def compute_nutriscore_score(energy_kj: float,
+
+
+    def __init__(self,
+                 point_tables: Optional[Dict[str, list]] = None,
+                 thresholds: Optional[Dict[str, list]] = None):
+        self.tables = point_tables if point_tables else DEFAULT_POINT_TABLES
+        self.thresholds = thresholds if thresholds else DEFAULT_THRESHOLDS
+
+
+
+    # Étape 1 : Points négatifs
+    def compute_negative_points(self,
+                                energy_kj: float,
                                 saturated_fat_g: float,
-                                sugars_g: float, 
-                                sodium_mg: float,
+                                sugars_g: float,
+                                sodium_or_salt_value: float) -> Tuple[int, Dict]:
+        #Calcule les points négatifs (énergie, SFA, sucres, sel).
+        
+        detail = {}
+
+        energy_pts = _get_points_from_table(energy_kj, self.tables["energy"])
+        sfa_pts = _get_points_from_table(saturated_fat_g, self.tables["saturated_fat"])
+        sugar_pts = _get_points_from_table(sugars_g, self.tables["sugars"])
+
+        # conversion sodium/sel
+        salt_g = convert_to_salt_g(sodium_or_salt_value)
+        salt_pts = _get_points_from_table(salt_g, self.tables["salt"])
+
+        detail.update({
+            "energy_points": energy_pts,
+            "saturated_fat_points": sfa_pts,
+            "sugars_points": sugar_pts,
+            "salt_g": salt_g,
+            "salt_points": salt_pts
+        })
+
+        total = energy_pts + sfa_pts + sugar_pts + salt_pts
+        return total, detail
+
+
+
+    # Étape 2 : Points positifs
+    def compute_positive_points(self,
                                 fiber_g: float,
                                 protein_g: float,
-                                fruits_veg_nuts_percent: float) -> Tuple[int, dict]:
-        """
-        Calcule le score Nutri-Score complet.
-        
-        Args:
-            energy_kj: Énergie en kJ pour 100g
-            saturated_fat_g: AG saturés en g pour 100g
-            sugars_g: Sucres en g pour 100g
-            sodium_mg: Sodium en mg pour 100g
-            fiber_g: Fibres en g pour 100g
-            protein_g: Protéines en g pour 100g
-            fruits_veg_nuts_percent: % fruits/légumes/noix
-            
-        Returns:
-            Tuple (score final, détail du calcul)
-        """
-        # Regrouper toutes les valeurs d'entrée pour validation
-        values = [energy_kj, saturated_fat_g, sugars_g, sodium_mg, 
-                 fiber_g, protein_g, fruits_veg_nuts_percent]
-        
-        # Vérifier s'il y a des valeurs manquantes et les signaler
-        if any(pd.isna(val) for val in values):
-            # Identifier précisément quelles valeurs sont manquantes
-            missing_values = [name for name, val in zip(
-                ['energy', 'saturated_fat', 'sugars', 'sodium', 
-                 'fiber', 'protein', 'fruits_veg_nuts'], values
-            ) if pd.isna(val)]
-            # Avertir de la présence de valeurs manquantes (peut affecter le calcul)
-            logger.warning(f"Valeurs manquantes pour le calcul Nutri-Score : {missing_values}")
-        
-        # Étape 1 : Calculer les points négatifs (éléments défavorables)
-        negative_points, negative_detail = NutriScoreCalculator.compute_negative_points(
-            energy_kj, saturated_fat_g, sugars_g, sodium_mg
+                                fruits_veg_percent: float,
+                                negative_points: int,
+                                category: str = "general") -> Tuple[int, Dict]:
+        """Calcule les points positifs avec la règle des protéines."""
+        detail = {}
+        fiber_pts = _get_points_from_table(fiber_g, self.tables["fiber"])
+        protein_pts = _get_points_from_table(protein_g, self.tables["protein"])
+        fruits_pts = _get_points_from_table(fruits_veg_percent, self.tables["fruits_veg"])
+
+        # Règle protéines : si points négatifs ≥ 11 et fruits < 80 %, ne pas compter les protéines
+        if negative_points >= 11 and (fruits_veg_percent < 80 or pd.isna(fruits_veg_percent)):
+            if category == "cheese":
+                detail["protein_rule_applied"] = False
+            else:
+                detail["protein_rule_applied"] = True
+                protein_pts = 0
+        else:
+            detail["protein_rule_applied"] = False
+
+        detail.update({
+            "fiber_points": fiber_pts,
+            "protein_points": protein_pts,
+            "fruits_veg_points": fruits_pts
+        })
+
+        total = fiber_pts + protein_pts + fruits_pts
+        return total, detail
+
+
+    # Étape 3 : Score final + label
+    def compute_score_and_label(self,
+                                energy_kj: float,
+                                saturated_fat_g: float,
+                                sugars_g: float,
+                                sodium_or_salt_value: float,
+                                fiber_g: float,
+                                protein_g: float,
+                                fruits_veg_percent: float,
+                                category: str = "general") -> Tuple[int, str, Dict]:
+
+        neg_pts, neg_detail = self.compute_negative_points(
+            energy_kj, saturated_fat_g, sugars_g, sodium_or_salt_value
         )
-        
-        # Étape 2 : Calculer les points positifs (éléments favorables)
-        # Passer negative_points pour appliquer la règle spéciale des protéines
-        positive_points, positive_detail = NutriScoreCalculator.compute_positive_points(
-            fiber_g, protein_g, fruits_veg_nuts_percent, negative_points
+        pos_pts, pos_detail = self.compute_positive_points(
+            fiber_g, protein_g, fruits_veg_percent, neg_pts, category
         )
-        
-        # Étape 3 : Calculer le score final (formule officielle : négatifs - positifs)
-        final_score = negative_points - positive_points
-        
-        # Créer un dictionnaire détaillé pour traçabilité complète
-        calculation_detail = {
-            'negative_points': negative_points,      # Total des points négatifs
-            'positive_points': positive_points,      # Total des points positifs
-            'final_score': final_score,             # Score final calculé
-            'negative_detail': negative_detail,      # Détail par composant négatif
-            'positive_detail': positive_detail       # Détail par composant positif
+
+        final_score = neg_pts - pos_pts
+        thresholds = self.thresholds["beverage"] if category == "beverage" else self.thresholds["solid"]
+        label = self.score_to_label(final_score, thresholds)
+
+        details = {
+            "negative_points": neg_pts,
+            "positive_points": pos_pts,
+            "final_score": final_score,
+            "negative_detail": neg_detail,
+            "positive_detail": pos_detail,
+            "category": category
         }
-        
-        # Retourner le score final et tous les détails de calcul
-        return final_score, calculation_detail
-    
-    @staticmethod
-    def score_to_label(score: int, is_solid: bool = True) -> str:
-        """
-        Convertit un score en label Nutri-Score (A à E).
-        
-        Args:
-            score: Score Nutri-Score calculé
-            is_solid: True pour aliments solides, False pour boissons
-            
-        Returns:
-            Label Nutri-Score (A, B, C, D ou E)
-        """
-        # Gérer les scores manquants ou invalides
-        if pd.isna(score):
-            return 'N/A'
-        
-        # Sélectionner la table de seuils appropriée selon le type d'aliment
-        # Les boissons ont des seuils plus permissifs que les aliments solides
-        thresholds = (NutriScoreCalculator.SOLID_FOOD_THRESHOLDS if is_solid 
-                     else NutriScoreCalculator.BEVERAGE_THRESHOLDS)
-        
-        # Parcourir les seuils pour trouver le label correspondant au score
-        for threshold, label in thresholds:
-            # Si le score est inférieur ou égal au seuil, assigner le label
-            if score <= threshold:
-                return label
-        
-        # Cas de sécurité : si aucun seuil n'est trouvé, retourner le pire label
-        return 'E'  # Par défaut
-    
-    @staticmethod
-    def compute_nutriscore_row(row: pd.Series, is_solid: bool = True) -> dict:
-        """
-        Calcule le Nutri-Score pour une ligne de DataFrame.
-        
-        Args:
-            row: Ligne du DataFrame avec les colonnes nutritionnelles
-            is_solid: Type d'aliment (solide ou boisson)
-            
-        Returns:
-            Dictionnaire avec score, label et détails
-        """
-        # Bloc try-except pour gérer les erreurs potentielles
-        try:
-            # Extraire les valeurs nutritionnelles de la ligne avec noms de colonnes standardisés
-            energy = row.get('energy_100g', np.nan)              # Énergie en kJ
-            saturated_fat = row.get('saturated_fat_100g', np.nan) # AG saturés en g
-            sugars = row.get('sugars_100g', np.nan)              # Sucres en g
-            sodium = row.get('sodium_100g', np.nan)              # Sodium en mg
-            fiber = row.get('fiber_100g', np.nan)                # Fibres en g
-            protein = row.get('proteins_100g', np.nan)           # Protéines en g
-            fruits_veg = row.get('fruits_veg_nuts_percent', np.nan) # % fruits/légumes/noix
-            
-            # Appeler la méthode principale de calcul du score Nutri-Score
-            score, details = NutriScoreCalculator.compute_nutriscore_score(
-                energy, saturated_fat, sugars, sodium, fiber, protein, fruits_veg
-            )
-            
-            # Convertir le score numérique en label alphabétique (A-E)
-            label = NutriScoreCalculator.score_to_label(score, is_solid)
-            
-            # Retourner un dictionnaire structuré avec tous les résultats
-            return {
-                'ns_score_calc': score,                    # Score numérique calculé
-                'ns_label_calc': label,                    # Label alphabétique (A-E)
-                'ns_calculation_details': details         # Détails complets du calcul
-            }
-            
-        except Exception as e:
-            # Gérer toute erreur survenant pendant le calcul
-            logger.error(f"Erreur calcul Nutri-Score pour ligne : {e}")
-            # Retourner un dictionnaire d'erreur avec valeurs par défaut
-            return {
-                'ns_score_calc': np.nan,           # Score invalide
-                'ns_label_calc': 'ERROR',          # Label d'erreur
-                'ns_calculation_details': {'error': str(e)}  # Message d'erreur détaillé
-            }
+        return final_score, label, details
 
 
-def apply_nutriscore(df: pd.DataFrame, is_solid: bool = True) -> pd.DataFrame:
-    """
-    Applique le calcul Nutri-Score à un DataFrame entier.
-    
-    Args:
-        df: DataFrame avec les données nutritionnelles
-        is_solid: Type d'aliment pour tous les produits
+
+    @staticmethod
+    def score_to_label(score: int, thresholds: list) -> str:
+        """Convertit un score numérique en label A–E."""
+        for thr, lab in thresholds:
+            if score <= thr:
+                return lab
+        return "E"
+
+
+
+    # Étape 4 : Application à DataFrame
+    def apply_to_dataframe(self, df: pd.DataFrame,
+                           colmap: Optional[Dict[str, str]] = None,
+                           default_category: str = "general") -> pd.DataFrame:
+        #Applique le calcul à un DataFrame
+        default_map = {
+            "energy": "energy_100g",
+            "saturated_fat": "saturated_fat_100g",
+            "sugars": "sugars_100g",
+            "salt": "sodium_100g",  # g/100g
+            "fiber": "fiber_100g",
+            "protein": "proteins_100g",
+            "fruits_veg": "fruits_veg_nuts_percent",
+            "category": None
+        }
+        if colmap:
+            default_map.update(colmap)
+
+        df_out = df.copy()
+
+        def _compute_row(row):
+            try:
+                score, label, details = self.compute_score_and_label(
+                    energy_kj=row.get(default_map["energy"], np.nan),
+                    saturated_fat_g=row.get(default_map["saturated_fat"], np.nan),
+                    sugars_g=row.get(default_map["sugars"], np.nan),
+                    sodium_or_salt_value=row.get(default_map["salt"], np.nan),
+                    fiber_g=row.get(default_map["fiber"], np.nan),
+                    protein_g=row.get(default_map["protein"], np.nan),
+                    fruits_veg_percent=row.get(default_map["fruits_veg"], np.nan),
+                    category=row.get(default_map["category"], default_category)
+                )
+                return pd.Series({
+                    "ns_score_calc": score,
+                    "ns_label_calc": label,
+                    "ns_calculation_details": details
+                })
+            except Exception as e:
+                logger.error(f"Erreur ligne : {e}")
+                return pd.Series({
+                    "ns_score_calc": np.nan,
+                    "ns_label_calc": "ERROR",
+                    "ns_calculation_details": {"error": str(e)}
+                })
+
+        results = df_out.apply(_compute_row, axis=1)
+        df_out = pd.concat([df_out, results], axis=1)
         
-    Returns:
-        DataFrame avec colonnes ns_score_calc et ns_label_calc ajoutées
-    """
-    # Enregistrer le début du processus dans les logs
-    logger.info(f"Application du calcul Nutri-Score à {len(df)} produits")
-    
-    # Créer une copie du DataFrame pour éviter de modifier l'original
-    df_result = df.copy()
-    
-    # Appliquer le calcul Nutri-Score à chaque ligne du DataFrame
-    nutriscore_results = df.apply(
-        # Fonction lambda qui calcule le Nutri-Score pour chaque ligne
-        lambda row: NutriScoreCalculator.compute_nutriscore_row(row, is_solid), 
-        axis=1  # Appliquer sur les lignes (pas les colonnes)
+        # Supprimer ns_calculation_details pour éviter les problèmes de groupby
+        if "ns_calculation_details" in df_out.columns:
+            df_out = df_out.drop(columns=["ns_calculation_details"])
+        
+        return df_out
+
+# Compatibilite Streamlit (fonctions simplifiées)
+
+_default_calc = NutriScoreCalculator()
+
+
+def compute_nutriscore_single(
+    energy_kj: float = 0,
+    saturated_fat_g: float = 0,
+    sugars_g: float = 0,
+    sodium_mg_or_salt_g: float = 0,
+    fiber_g: float = 0,
+    protein_g: float = 0,
+    fruits_veg_nuts_percent: float = 0,
+    category: str = "general"
+) -> dict:
+    #Fonction simplifiée compatible Streamlit (calcul unitaire)
+    score, label, details = _default_calc.compute_score_and_label(
+        energy_kj, saturated_fat_g, sugars_g, sodium_mg_or_salt_g,
+        fiber_g, protein_g, fruits_veg_nuts_percent, category
     )
-    
-    # Extraire les scores calculés et les ajouter au DataFrame résultat
-    df_result['ns_score_calc'] = nutriscore_results.apply(lambda x: x['ns_score_calc'])
-    # Extraire les labels calculés et les ajouter au DataFrame résultat
-    df_result['ns_label_calc'] = nutriscore_results.apply(lambda x: x['ns_label_calc'])
-    
-    # Calculer et afficher les statistiques sur les résultats
-    valid_scores = df_result['ns_score_calc'].dropna()  # Récupérer seulement les scores valides
-    if len(valid_scores) > 0:
-        # Afficher les statistiques de succès
-        logger.info(f"Nutri-Score calculé pour {len(valid_scores)} produits")
-        # Afficher la distribution des labels (combien de A, B, C, D, E)
-        logger.info(f"Distribution des labels : {df_result['ns_label_calc'].value_counts().to_dict()}")
-        # Afficher les statistiques descriptives des scores
-        logger.info(f"Score moyen : {valid_scores.mean():.1f}, médiane : {valid_scores.median():.1f}")
+    return {"score": score, "label": label, "details": details}
+
+
+
+
+# Cas Excel (nouvelle fonction adaptée) 
+def compute_nutriscore_from_excel_row(row):
+
+    # Récupération sécurisée
+    energy = row.get("energy_100g", np.nan)
+    sodium = row.get("sodium_100g", np.nan)
+
+    # Conversion énergie
+    #if not pd.isna(energy) and energy < 500:  # valeur en kcal
+     #   energy = energy * 4.184  # conversion en kJ
+
+    # Conversion sodium
+    #if not pd.isna(sodium) and sodium < 10:  # valeur en g de sel
+        #sodium = sodium * 400  # conversion en mg sodium
+
+    return compute_nutriscore_single(
+        energy_kj=energy,
+        saturated_fat_g=row.get("saturated_fat_100g", np.nan),
+        sugars_g=row.get("sugars_100g", np.nan),
+        sodium_mg_or_salt_g=sodium,
+        fiber_g=row.get("fiber_100g", np.nan),
+        protein_g=row.get("proteins_100g", np.nan),
+        fruits_veg_nuts_percent=row.get("fruits_veg_nuts_percent", np.nan)
+    )
+
+
+def apply_nutriscore(df: pd.DataFrame, category_col: str = None) -> pd.DataFrame:
+    #Fonction compatible Streamlit (calcul dataset).
+    if category_col and category_col in df.columns:
+        return _default_calc.apply_to_dataframe(df, colmap={"category": category_col})
     else:
-        # Avertir si aucun score n'a pu être calculé
-        logger.warning("Aucun score Nutri-Score calculé")
-    
-    # Retourner le DataFrame enrichi avec les colonnes Nutri-Score
-    return df_result
+        return _default_calc.apply_to_dataframe(df)
 
 
-def compute_nutriscore_single(energy_kj: float = 0,
-                             saturated_fat_g: float = 0,
-                             sugars_g: float = 0,
-                             sodium_mg: float = 0,
-                             fiber_g: float = 0,
-                             protein_g: float = 0,
-                             fruits_veg_nuts_percent: float = 0,
-                             is_solid: bool = True) -> dict:
-    """
-    Calcule le Nutri-Score pour des valeurs individuelles.
+#  Fonction batch pour Excel
+def apply_nutriscore_excel(df):
+    # Applique le calcul Nutri-Score sur tout un DataFrame Excel.
     
-    Args:
-        energy_kj: Énergie en kJ
-        saturated_fat_g: AG saturés en g
-        sugars_g: Sucres en g
-        sodium_mg: Sodium en mg
-        fiber_g: Fibres en g
-        protein_g: Protéines en g
-        fruits_veg_nuts_percent: % fruits/légumes/noix
-        is_solid: Type d'aliment
-        
-    Returns:
-        Dictionnaire avec score, label et détails
-    """
-    # Appeler la méthode principale de calcul du score avec toutes les valeurs nutritionnelles
-    score, details = NutriScoreCalculator.compute_nutriscore_score(
-        energy_kj, saturated_fat_g, sugars_g, sodium_mg, 
-        fiber_g, protein_g, fruits_veg_nuts_percent
-    )
-    
-    # Convertir le score numérique en label alphabétique
-    label = NutriScoreCalculator.score_to_label(score, is_solid)
-    
-    # Retourner un dictionnaire structuré avec les résultats
-    return {
-        'score': score,      # Score numérique final
-        'label': label,      # Label alphabétique (A-E)
-        'details': details   # Détails complets du calcul
-    }
+    df = df.copy()
+    results = df.apply(lambda row: compute_nutriscore_from_excel_row(row), axis=1)
 
+    df["ns_score_calc"] = results.apply(lambda r: r["score"])
+    df["ns_label_calc"] = results.apply(lambda r: r["label"])
+    
+    # Supprimer la colonne ns_calculation_details si elle existe (cause des problèmes de groupby)
+    if "ns_calculation_details" in df.columns:
+        df = df.drop(columns=["ns_calculation_details"])
 
-if __name__ == "__main__":
-    # Section de test du module (exécutée uniquement si le fichier est lancé directement)
-    print("=== Test du calcul Nutri-Score ===")
-    
-    # Définir des cas de test avec des profils nutritionnels différents
-    test_cases = [
-        {
-            'name': 'Produit A (excellent)',        # Produit avec profil nutritionnel favorable
-            'energy_kj': 300,                       # Faible énergie
-            'saturated_fat_g': 0.5,                 # Peu d'acides gras saturés
-            'sugars_g': 2.0,                        # Peu de sucres
-            'sodium_mg': 50,                        # Peu de sodium
-            'fiber_g': 3.0,                         # Bonne teneur en fibres
-            'protein_g': 5.0,                       # Bonne teneur en protéines
-            'fruits_veg_nuts_percent': 60           # Bon pourcentage de fruits/légumes
-        },
-        {
-            'name': 'Produit E (mauvais)',          # Produit avec profil nutritionnel défavorable
-            'energy_kj': 2500,                      # Énergie élevée
-            'saturated_fat_g': 15.0,                # Beaucoup d'acides gras saturés
-            'sugars_g': 40.0,                       # Beaucoup de sucres
-            'sodium_mg': 1000,                      # Beaucoup de sodium
-            'fiber_g': 0.1,                         # Très peu de fibres
-            'protein_g': 2.0,                       # Peu de protéines
-            'fruits_veg_nuts_percent': 0            # Aucun fruit/légume
-        }
-    ]
-    
-    # Tester chaque cas et afficher les résultats
-    for test_case in test_cases:
-        # Extraire le nom du test et le retirer du dictionnaire des paramètres
-        name = test_case.pop('name')
-        # Calculer le Nutri-Score avec les paramètres restants
-        result = compute_nutriscore_single(**test_case)
-        
-        # Afficher les résultats de manière structurée
-        print(f"\n{name}:")
-        print(f"  Score: {result['score']}")                              # Score numérique final
-        print(f"  Label: {result['label']}")                              # Label alphabétique
-        print(f"  Points négatifs: {result['details']['negative_points']}") # Total points défavorables
-        print(f"  Points positifs: {result['details']['positive_points']}") # Total points favorables
-    
-    # Message de fin des tests
-    print("\nTests terminés avec succès !")
+    return df

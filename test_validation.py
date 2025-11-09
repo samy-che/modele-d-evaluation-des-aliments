@@ -23,7 +23,7 @@ def test_criterion_1_single_calculation():
         energy_kj=1811.672,
         saturated_fat_g=3.8,
         sugars_g=14.0,
-        sodium_mg=112.0,
+        sodium_mg_or_salt_g=112.0,
         fiber_g=9.8,
         protein_g=9.8,
         fruits_veg_nuts_percent=0.219
@@ -162,7 +162,7 @@ def test_criterion_6_robustness():
         energy_kj=5000,  # Très élevé
         saturated_fat_g=50,
         sugars_g=100,
-        sodium_mg=2000,
+        sodium_mg_or_salt_g=2000,
         fiber_g=0,
         protein_g=0,
         fruits_veg_nuts_percent=0

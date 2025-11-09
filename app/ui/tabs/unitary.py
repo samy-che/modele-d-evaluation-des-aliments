@@ -144,7 +144,7 @@ def render_unitary_tab(
                     energy_kj=energy_kj,
                     saturated_fat_g=sat_fat,
                     sugars_g=sugars,
-                    sodium_mg=sodium_mg,
+                    sodium_mg_or_salt_g=sodium_mg,
                     fiber_g=fiber,
                     protein_g=proteins,
                     fruits_veg_nuts_percent=fruits_veg,

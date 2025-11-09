@@ -171,7 +171,7 @@ def render_dataset_tab(
         col1, col2 = st.columns([3, 1])
 
         with col1:
-            st.dataframe(df.head(10), use_container_width=True)
+            st.dataframe(df.head(110), use_container_width=True)
 
         with col2:
             st.metric("Nombre de produits", len(df))
