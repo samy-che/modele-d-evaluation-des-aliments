@@ -10,7 +10,7 @@ import yaml         # Pour lire les fichiers de configuration YAML
 import logging      # Pour enregistrer les logs et messages de débogage
 from typing import Dict, List, Tuple, Optional  # Pour les annotations de types
 from pathlib import Path  # Pour gérer les chemins de fichiers de manière portable
-from utils.paths import get_config_path
+from app.utils.paths import get_config_path
 
 # Configuration du système de logging pour tracer l'exécution
 logger = logging.getLogger(__name__)  # Créer un logger spécifique à ce module

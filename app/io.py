@@ -7,7 +7,7 @@ import yaml
 import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-from utils.paths import get_config_path
+from app.utils.paths import get_config_path
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)

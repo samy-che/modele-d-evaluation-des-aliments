@@ -4,11 +4,13 @@ import os
 from typing import Any, Dict, Optional
 
 import streamlit as st
+import requests
 
 from app.electre_tri import electre_sorting
 from app.eval import compare_nutriscore_electre
 from app.nutriscore import apply_nutriscore
 from app.ui.cache_utils import load_and_process_data
+from app.normalize import normalize_data
 
 
 def render_dataset_tab(
@@ -24,10 +26,11 @@ def render_dataset_tab(
 
     data_source = st.radio(
         "Source des données:",
-        ["Fichier par défaut (data/produits.xlsx)", "Charger un autre fichier"],
+        ["Fichier par défaut (data/produits.xlsx)", "Charger un autre fichier", "🌐 API OpenFoodFacts"],
     )
 
     excel_path = "data/produits.xlsx"
+    use_api = False
 
     if data_source == "Charger un autre fichier":
         uploaded_file = st.file_uploader(
@@ -41,6 +44,34 @@ def render_dataset_tab(
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             excel_path = temp_path
+    
+    elif data_source == "🌐 API OpenFoodFacts":
+        use_api = True
+        st.info("📡 Récupération des données depuis OpenFoodFacts")
+        
+        col_api1, col_api2 = st.columns(2)
+        with col_api1:
+            api_query = st.text_input("Recherche (optionnel)", placeholder="Ex: Nutella, Coca-Cola...")
+            api_category = st.selectbox(
+                "Catégorie",
+                ["", "cereals", "yogurts", "cheeses", "chocolates", "beverages", "snacks"],
+                help="Laisser vide pour toutes les catégories"
+            )
+        
+        with col_api2:
+            api_max_products = st.number_input("Nombre max de produits", min_value=10, max_value=500, value=100, step=10)
+            api_country = st.selectbox("Pays", ["France", "World", "Belgium", "Switzerland"])
+        
+        # Stocker les paramètres API
+        if 'api_params' not in st.session_state:
+            st.session_state.api_params = {}
+        
+        st.session_state.api_params = {
+            'query': api_query,
+            'category': api_category if api_category else None,
+            'max_products': api_max_products,
+            'countries': api_country
+        }
 
     if "dataset_loaded" not in st.session_state:
         st.session_state.dataset_loaded = False
@@ -49,33 +80,87 @@ def render_dataset_tab(
     col1, col2, col3 = st.columns([1, 1, 2])
 
     with col1:
-        if st.button("📊 Charger l'Excel", type="primary"):
-            with st.spinner("Chargement et normalisation des données..."):
-                df_processed, mapping, quality, norm_report, error = load_and_process_data(excel_path)
-
-            if error:
-                st.error(f"Erreur de chargement : {error}")
+        button_label = "🌐 Charger depuis API" if use_api else "📊 Charger l'Excel"
+        if st.button(button_label, type="primary"):
+            if use_api:
+                # Chargement depuis OpenFoodFacts API
+                try:
+                    from app.api_openfoodfacts import OpenFoodFactsAPI
+                    
+                    params = st.session_state.api_params
+                    max_prod = params.get('max_products', 50)
+                    
+                    # Calculer temps estimé (~0.7s par produit)
+                    estimated_time = int(max_prod * 0.7)
+                    
+                    info_placeholder = st.empty()
+                    info_placeholder.info(f"🌐 Connexion à l'API OpenFoodFacts...")
+                    
+                    with st.spinner(f"Récupération de {max_prod} produits maximum..."):
+                        api = OpenFoodFactsAPI()
+                        df_raw = api.search_to_dataframe(
+                            query=params.get('query', ''),
+                            category=params.get('category'),
+                            max_products=max_prod,
+                            countries=params.get('countries', 'France')
+                        )
+                    
+                    info_placeholder.empty()
+                    
+                    if df_raw.empty:
+                        st.error("❌ Aucun produit trouvé avec ces critères. Essayez de modifier la catégorie ou la recherche.")
+                    else:
+                        # Normaliser les données
+                        with st.spinner("Normalisation des données..."):
+                            df_normalized, norm_report = normalize_data(df_raw)
+                        
+                        st.session_state.dataset_loaded = True
+                        st.session_state.df_processed = df_normalized
+                        
+                        st.success(f"✅ {len(df_normalized)} produits récupérés depuis OpenFoodFacts !")
+                        
+                        with st.expander("📋 Rapport de récupération"):
+                            st.write(f"**Produits bruts:** {len(df_raw)}")
+                            st.write(f"**Après normalisation:** {len(df_normalized)}")
+                            if norm_report.get('rows_removed', 0) > 0:
+                                st.warning(f"⚠️ {norm_report['rows_removed']} produits supprimés (données manquantes)")
+                            st.write(f"**Colonnes:** {', '.join(df_normalized.columns[:8])}...")
+                
+                except requests.exceptions.Timeout:
+                    st.error("❌ Timeout: L'API met trop de temps à répondre. Réduisez le nombre de produits.")
+                except Exception as e:
+                    st.error(f"❌ Erreur API OpenFoodFacts: {e}")
+                    with st.expander("Détails de l'erreur"):
+                        import traceback
+                        st.code(traceback.format_exc())
             else:
-                st.session_state.dataset_loaded = True
-                st.session_state.df_processed = df_processed
+                # Chargement depuis fichier Excel
+                with st.spinner("Chargement et normalisation des données..."):
+                    df_processed, mapping, quality, norm_report, error = load_and_process_data(excel_path)
 
-                st.success(f"✅ Données chargées : {len(df_processed)} produits")
+                if error:
+                    st.error(f"Erreur de chargement : {error}")
+                else:
+                    st.session_state.dataset_loaded = True
+                    st.session_state.df_processed = df_processed
 
-                with st.expander("Rapport de qualité des données"):
-                    col_a, col_b = st.columns(2)
+                    st.success(f"✅ Données chargées : {len(df_processed)} produits")
 
-                    with col_a:
-                        st.write("**Mapping des colonnes:**")
-                        for canonical, original in mapping.items():
-                            st.write(f"- {canonical} ← {original}")
+                    with st.expander("Rapport de qualité des données"):
+                        col_a, col_b = st.columns(2)
 
-                    with col_b:
-                        st.write("**Normalisation appliquée:**")
-                        for step in norm_report.get("steps_applied", []):
-                            st.write(f"✓ {step}")
+                        with col_a:
+                            st.write("**Mapping des colonnes:**")
+                            for canonical, original in mapping.items():
+                                st.write(f"- {canonical} ← {original}")
 
-                        if norm_report.get("rows_removed", 0) > 0:
-                            st.warning(f"⚠️ {norm_report['rows_removed']} lignes supprimées")
+                        with col_b:
+                            st.write("**Normalisation appliquée:**")
+                            for step in norm_report.get("steps_applied", []):
+                                st.write(f"✓ {step}")
+
+                            if norm_report.get("rows_removed", 0) > 0:
+                                st.warning(f"⚠️ {norm_report['rows_removed']} lignes supprimées")
 
     if st.session_state.dataset_loaded and st.session_state.df_processed is not None:
         df = st.session_state.df_processed
@@ -204,6 +289,24 @@ def render_dataset_tab(
                             with col_f:
                                 tol2 = metrics.get("accuracy_tolerance_2", 0)
                                 st.write(f"±2 niveaux: {tol2:.3f}")
+
+                        # Affichage des visualisations
+                        st.subheader("📊 Visualisations")
+                        viz_col1, viz_col2 = st.columns(2)
+                        
+                        with viz_col1:
+                            confusion_path = "outputs/reports/confusion_matrix.png"
+                            if os.path.exists(confusion_path):
+                                st.image(confusion_path, caption="Matrice de confusion", use_container_width=True)
+                            else:
+                                st.info("Matrice de confusion non disponible")
+                        
+                        with viz_col2:
+                            metrics_path = "outputs/reports/metrics_comparison.png"
+                            if os.path.exists(metrics_path):
+                                st.image(metrics_path, caption="Comparaison des métriques", use_container_width=True)
+                            else:
+                                st.info("Graphique des métriques non disponible")
 
                         files = report.get("summary", {}).get("files_generated", {})
                         if files:

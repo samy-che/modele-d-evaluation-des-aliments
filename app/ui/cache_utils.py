@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import streamlit as st
 import yaml
 
-from utils.paths import get_config_path
+from app.utils.paths import get_config_path
 from app.io import load_data, ExcelDataLoader  # noqa: F401 utilisé pour compatibilité
 from app.normalize import normalize_data
 
