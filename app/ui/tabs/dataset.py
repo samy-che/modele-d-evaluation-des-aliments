@@ -5,10 +5,13 @@ from typing import Any, Dict, Optional
 
 import streamlit as st
 import requests
+import numpy as np
+
 
 from app.electre_tri import electre_sorting
 from app.eval import compare_nutriscore_electre
 from app.nutriscore import apply_nutriscore
+from app.nutriscore import apply_nutriscore_excel
 from app.ui.cache_utils import load_and_process_data
 from app.normalize import normalize_data
 
@@ -189,19 +192,70 @@ def render_dataset_tab(
             if st.button("🧮 Recalculer Nutri-Score", type="secondary"):
                 with st.spinner("Calcul du Nutri-Score sur le dataset..."):
                     try:
-                        df_with_nutri = apply_nutriscore(df)
+                        # 🧮 1. Calcul du Nutri-Score
+                        df_with_nutri = apply_nutriscore_excel(df)
                         st.session_state.df_processed = df_with_nutri
 
+                        # ✅ 2. Comparaison avec Nutri-Score original (si présent)
+                        if (
+                            'ns_label_original' in df_with_nutri.columns and
+                            'ns_label_calc' in df_with_nutri.columns and
+                            'ns_score_original' in df_with_nutri.columns and
+                            'ns_score_calc' in df_with_nutri.columns
+                        ):
+                            df_with_nutri['Comparaison_NS'] = np.where(
+                                df_with_nutri['ns_label_original'] == df_with_nutri['ns_label_calc'],
+                                '✅ Label identique',
+                                '⚠️ Label différent'
+                            )
+                            df_with_nutri['Comparaison_Score'] = np.where(
+                                df_with_nutri['ns_score_original'] == df_with_nutri['ns_score_calc'],
+                                '✅ Score identique',
+                                '⚠️ Score différent'
+                            )
+
+                        # 📊 3. Affichage global
                         label_dist = df_with_nutri["ns_label_calc"].value_counts()
+                        st.success("✅ Nutri-Score recalculé avec succès !")
 
-                        st.success("✅ Nutri-Score calculé !")
-
-                        st.write("**Distribution des labels:**")
+                        st.write("**Distribution des labels recalculés :**")
                         for label, count in label_dist.items():
                             st.write(f"- {label}: {count}")
 
-                    except Exception as e:  # pragma: no cover - gestion d'erreur UI
+                        # 🧾 4. Comparaison détaillée (produit par produit)
+                        if {'produit', 'ns_label_original', 'ns_label_calc',
+                            'ns_score_original', 'ns_score_calc',
+                            'Comparaison_NS', 'Comparaison_Score'}.issubset(df_with_nutri.columns):
+
+                            st.markdown("### 🔍 Comparaison détaillée (Original vs Recalculé)")
+
+                            diff_df = df_with_nutri[
+                                ['produit',
+                                'ns_score_original', 'ns_score_calc', 'Comparaison_Score',
+                                'ns_label_original', 'ns_label_calc', 'Comparaison_NS']
+                            ].copy()
+
+                            diff_only = diff_df[
+                                (diff_df['Comparaison_NS'] != '✅ Label identique') |
+                                (diff_df['Comparaison_Score'] != '✅ Score identique')
+                            ]
+
+                            if len(diff_only) > 0:
+                                st.warning(f"⚠️ {len(diff_only)} produit(s) présentent des écarts entre les Nutri-Scores :")
+                                st.dataframe(diff_only, use_container_width=True)
+                            else:
+                                st.success("✅ Tous les scores et labels Nutri-Score sont identiques.")
+
+                            st.write("### 👁️ Aperçu global :")
+                            st.dataframe(diff_df.head(30), use_container_width=True)
+
+                        else:
+                            st.info("ℹ️ Colonnes nécessaires à la comparaison manquantes (vérifie ton Excel).")
+
+                    except Exception as e:
                         st.error(f"Erreur calcul Nutri-Score : {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
 
         with col2:
             if st.button("🎯 Appliquer ELECTRE TRI", type="secondary"):

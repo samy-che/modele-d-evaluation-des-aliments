@@ -118,9 +118,9 @@ class ExcelDataLoader:
         
         # Colonnes requises pour le calcul Nutri-Score
         required_columns = [
-            'product_name', 'energy_100g', 'saturated_fat_100g', 
-            'sugars_100g', 'sodium_100g', 'proteins_100g', 
-            'fiber_100g', 'fruits_veg_nuts_percent'
+            'Produit', 'valeur energetique (KJ)', 'quantite acides gras satures (g)', 
+            'quantite de sucres (g)', 'quantite de Sodium (mg/g)', 'quantite de proteines (g)', 
+            'quantite de Fibres (g)', 'teneur en Fruits/Legumes/Fruits a coques'
         ]
         
         # Colonnes optionnelles

@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 
+#streamlit run c:/Users/alila/Desktop/Projet_transparence/modele-d-evaluation-des-aliments/app/ui_streamlit.py
+
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir.parent))
 
