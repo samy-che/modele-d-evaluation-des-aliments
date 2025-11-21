@@ -380,6 +380,90 @@ def render_dataset_tab(
             if not (has_nutri and has_electre):
                 st.info("💡 Calculez d'abord Nutri-Score et ELECTRE TRI")
 
+            if st.button("🌟 Calculer Super Nutri-Score", type="secondary"):
+                try:
+                    df_super = st.session_state.df_processed.copy()
+
+                    # Vérifier colonne Bio
+                    if "bio or no" in df_super.columns:
+                        df_super["is_bio"] = (
+                            df_super["bio or no"]
+                            .fillna("Non")
+                            .astype(str)
+                            .str.strip()
+                            .str.lower()
+                            .map({
+                                "oui": 1, "yes": 1, "true": 1, "1": 1,
+                                "non": 0, "no": 0, "false": 0, "0": 0
+                            })
+                            .fillna(0)
+                            .astype(int)
+                        )
+                    else:
+                        st.warning("⚠️ Colonne 'Bio or no' absente : bio mis à 0 pour tout le dataset.")
+                        df_super["is_bio"] = 0
+
+                    # Vérifier colonne Green-Score
+                    if "green label" in df_super.columns:
+                        df_super["green_points"] = df_super["green label"].astype(str).str.upper().map({
+                            "A": 2, "B": 1, "C": 0, "D": -1, "E": -2
+                        }).fillna(0)
+                    else:
+                        st.warning("⚠️ Colonne 'green_score' absente : Green-Score mis à 0.")
+                        df_super["green_points"] = 0
+
+                    # Colonnes obligatoires
+                    required_cols = {"ns_label_calc", "electre_cat", "is_bio", "green_points"}
+                    missing = required_cols - set(df_super.columns)
+                    if missing:
+                        st.error(f"Colonnes manquantes pour SuperNutri-Score : {missing}")
+                        return
+
+                    # Mapping NutriScore & Electre
+                    nutri_map = {"A": 2, "B": 1, "C": 0, "D": -1, "E": -2}
+                    electre_map = {"A'": 2, "B'": 1, "C'": 0, "D'": -1, "E'": -2}
+
+                    #df_super["nutri_points"] = df_super["ns_label_calc"].map(nutri_map).fillna(0)
+                    df_super["electre_points"] = df_super["electre_cat"].map(electre_map).fillna(0)
+
+                    # Pondérations
+                    #w_nutri = 0.45
+                    w_electre = 0.6
+                    w_bio = 0.1
+                    w_green = 0.3
+
+                    df_super["super_score"] = (
+                        #df_super["nutri_points"] * w_nutri +
+                        df_super["electre_points"] * w_electre +
+                        df_super["is_bio"] * w_bio +
+                        df_super["green_points"] * w_green
+                    )
+
+                    # Classification finale
+                    def score_to_letter(s):
+                        if s >= 1.5: return "A"
+                        if s >= 0.5: return "B"
+                        if s >= -0.5: return "C"
+                        if s >= -1.5: return "D"
+                        return "E"
+                    
+
+                    df_super["super_label"] = df_super["super_score"].apply(score_to_letter)
+
+                    st.session_state.df_processed = df_super
+
+                    st.success("🌟 Super Nutri-Score (pondéré + Green-Score) calculé avec succès !")
+                    st.dataframe(
+                        df_super[["produit", "ns_label_calc", "electre_cat",
+                                "is_bio", "green_points", "super_score", "super_label"]].head(20),
+                        use_container_width=True
+                    )
+
+                except Exception as e:
+                    st.error(f"Erreur Super Nutri-Score : {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
         if st.session_state.df_processed is not None:
             st.divider()
             st.subheader("💾 Export des résultats")

@@ -1,6 +1,7 @@
 """
 Module d'évaluation et comparaison entre Nutri-Score et ELECTRE TRI.
 Génère matrices de confusion, métriques et rapports visuels.
+
 """
 
 import pandas as pd
