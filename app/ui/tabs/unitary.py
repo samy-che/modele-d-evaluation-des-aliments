@@ -23,7 +23,7 @@ def render_unitary_tab(
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("💊 Saisie des composantes nutritionnelles")
+        st.subheader("Saisie des composantes nutritionnelles")
 
         col_a, col_b = st.columns(2)
 
@@ -120,7 +120,7 @@ def render_unitary_tab(
             )
 
     with col2:
-        st.subheader("📊 État de la configuration")
+        st.subheader("État de la configuration")
 
         if electre_config:
             st.success("✅ Configuration ELECTRE chargée")
@@ -145,7 +145,7 @@ def render_unitary_tab(
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("🧮 Calculer Nutri-Score", type="primary"):
+        if st.button("Calculer Nutri-Score", type="primary"):
             try:
                 nutri_result = compute_nutriscore_single(
                     energy_kj=energy_kj,
@@ -164,7 +164,7 @@ def render_unitary_tab(
                 st.error(f"Erreur calcul Nutri-Score : {e}")
 
     with col2:
-        if st.button("🎯 Classer avec ELECTRE TRI", type="secondary") and electre_config:
+        if st.button("Classer avec ELECTRE TRI", type="secondary") and electre_config:
             try:
                 criteria_values = {
                     "energy_100g": energy_kj,
@@ -199,7 +199,7 @@ def render_unitary_tab(
     # -------------------------------------------------
 
     st.divider()
-    st.subheader("🌟 Super Nutri-Score (Version pondérée)")
+    st.subheader("Super Nutri-Score (Version pondérée)")
 
     green_label = st.selectbox(
         "Green-Score du produit",
@@ -211,9 +211,9 @@ def render_unitary_tab(
     green_points = {"A": 1.0, "B": 0.75, "C": 0.50, "D": 0.25, "E": 0.0}.get(green_label, 0)
 
     st.divider()
-    st.subheader("🌟 Super Nutri-Score (Version pondérée)")
+    st.subheader("Super Nutri-Score (Version pondérée)")
 
-    if st.button("🌟 Calculer SuperNutri-Score Pondéré", type="primary"):
+    if st.button("Calculer SuperNutri-Score Pondéré", type="primary"):
 
         try:
 
@@ -262,7 +262,7 @@ def render_unitary_tab(
                 super_label = "E''"
 
             # Affichage final
-            st.success(f"🌟 Super Nutri-Score Pondéré : **{super_label}**")
+            st.success(f"Super Nutri-Score Pondéré : **{super_label}**")
             st.info(f"""
             **Détails du calcul :**
             - green_points = {green_points} → {green_points} (*0.3)

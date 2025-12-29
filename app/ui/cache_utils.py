@@ -75,8 +75,10 @@ def load_and_process_data(excel_path: str) -> tuple:
             "nombre d'aditife": "additives_count",
         }
 
-        df_raw.rename(columns={k: v for k, v in column_mapping_norm.items() if k in df_raw.columns},
-                      inplace=True)
+        # Garder le mapping réel (ancien nom -> nouveau nom) pour le rapport
+        applied_mapping = {k: v for k, v in column_mapping_norm.items() if k in df_raw.columns}
+        
+        df_raw.rename(columns=applied_mapping, inplace=True)
 
         # 3) Conversion numérique stricte
         numeric_cols = [
@@ -91,9 +93,18 @@ def load_and_process_data(excel_path: str) -> tuple:
                                .str.replace(r"[^0-9.\-Ee]", "", regex=True)
                                .apply(lambda x: np.nan if x == "" else float(x)))
 
-        mapping = {c: c for c in df_raw.columns}
-        quality = {"rows": len(df_raw), "cols": len(df_raw.columns)}
-        norm_report = {"steps_applied": ["normalize headers", "rename columns", "numeric cast"]}
+        # Mapping réel : clé = nom canonique, valeur = nom original avant normalisation
+        mapping = {v: k for k, v in applied_mapping.items()}
+        quality = {
+            "rows": len(df_raw), 
+            "cols": len(df_raw.columns),
+            "colonnes_mappees": len(applied_mapping),
+            "colonnes_numeriques": len([c for c in numeric_cols if c in df_raw.columns])
+        }
+        norm_report = {
+            "steps_applied": ["Normalisation des en-têtes", "Renommage des colonnes", "Conversion numérique"],
+            "rows_removed": 0
+        }
 
         return df_raw, mapping, quality, norm_report, None
 

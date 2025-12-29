@@ -10,14 +10,14 @@ from app.ui.cache_utils import load_electre_config
 def render_sidebar() -> Tuple[Dict[str, Any], str, float, Optional[Dict[str, float]]]:
     """Affiche la configuration dans la barre latérale et retourne les paramètres sélectionnés."""
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.header("Configuration")
 
         electre_config = load_electre_config()
 
         if electre_config:
             st.success("Configuration ELECTRE chargée ✅")
             st.divider()
-            st.subheader("🎛️ Paramètres ELECTRE TRI")
+            st.subheader("Paramètres ELECTRE TRI")
 
             variant = st.selectbox(
                 "Variante ELECTRE TRI",
@@ -46,7 +46,7 @@ def render_sidebar() -> Tuple[Dict[str, Any], str, float, Optional[Dict[str, flo
             custom_weights: Optional[Dict[str, float]] = None
 
             if use_custom_weights:
-                with st.expander("⚖️ Ajuster les poids des critères", expanded=True):
+                with st.expander("Ajuster les poids des critères", expanded=True):
                     st.write("*Les poids seront normalisés automatiquement pour sommer à 1*")
 
                     weights = electre_config.get("weights", {})
@@ -112,7 +112,7 @@ def render_sidebar() -> Tuple[Dict[str, Any], str, float, Optional[Dict[str, flo
                     for criterion, weight in weights.items():
                         st.write(f"- {criterion.replace('_', ' ').title()}: {weight:.3f}")
         else:
-            st.error("Configuration ELECTRE non disponible ❌")
+            st.error("Configuration ELECTRE non disponible ")
             variant = "pessimistic"
             lambda_val = 0.7
             custom_weights = None

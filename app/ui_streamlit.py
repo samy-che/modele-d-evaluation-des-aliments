@@ -11,9 +11,10 @@ current_dir = Path(__file__).parent
 sys.path.append(str(current_dir.parent))
 
 try:
-    from app.ui.setup import setup_page_and_logging
+    from app.ui.setup import setup_page_and_logging, setup_sidebar_control
     from app.ui.sidebar import render_sidebar
     from app.ui.tabs.dataset import render_dataset_tab
+    from app.ui.tabs.home import render_home_tab
     from app.ui.tabs.unitary import render_unitary_tab
 except ImportError as e:
     st.error(f"Erreur d'import des modules : {e}")
@@ -25,7 +26,7 @@ logger = setup_page_and_logging(__name__)
 
 def main() -> None:
     """Point d'entrée principal de l'interface utilisateur."""
-    st.markdown('<h1 class="main-header">🥗 Nutri-Score & ELECTRE TRI</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Nutri-Score & ELECTRE TRI & Super Nutri-Score</h1>', unsafe_allow_html=True)
     st.markdown(
         """
     **Prototype d'évaluation nutritionnelle** combinant le calcul officiel du Nutri-Score 
@@ -34,13 +35,19 @@ def main() -> None:
     )
 
     electre_config, variant, lambda_val, custom_weights = render_sidebar()
+    
+    # Injecter le script de contrôle de la sidebar
+    setup_sidebar_control()
 
-    tab1, tab2 = st.tabs(["🧮 Calcul Unitaire", "📊 Traitement Dataset"])
+    tab1, tab2, tab3 = st.tabs(["🏠 Accueil", "🧮 Calcul Unitaire", "📊 Traitement Dataset"])
 
     with tab1:
-        render_unitary_tab(electre_config, variant, lambda_val, custom_weights)
+        render_home_tab()
 
     with tab2:
+        render_unitary_tab(electre_config, variant, lambda_val, custom_weights)
+
+    with tab3:
         render_dataset_tab(electre_config, variant, lambda_val, custom_weights)
 
 

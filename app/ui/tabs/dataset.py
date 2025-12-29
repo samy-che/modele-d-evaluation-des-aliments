@@ -21,13 +21,21 @@ def render_dataset_tab(
     custom_weights: Optional[Dict[str, float]],
 ) -> None:
     """Affiche le contenu de l'onglet de traitement de dataset."""
-    st.header("Traitement du dataset et comparaison")
+    
+    # En-tête stylisé
+    st.markdown("""
+    <div class="dataset-header">
+        <h2>📊 Traitement du Dataset et Comparaison</h2>
+        <p>Chargez vos données, appliquez les méthodes d'évaluation et comparez les résultats</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.subheader("📁 Chargement des données")
+    st.markdown('<h3 class="section-header">📁 Chargement des données</h3>', unsafe_allow_html=True)
 
     data_source = st.radio(
         "Source des données:",
-        ["Fichier par défaut (data/produits.xlsx)", "Charger un autre fichier", "🌐 API OpenFoodFacts"],
+        ["Fichier par défaut (data/produits.xlsx)", "Charger un autre fichier", "API OpenFoodFacts"],
+        horizontal=True
     )
 
     excel_path = "data/produits.xlsx"
@@ -46,7 +54,7 @@ def render_dataset_tab(
                 f.write(uploaded_file.getbuffer())
             excel_path = temp_path
     
-    elif data_source == "🌐 API OpenFoodFacts":
+    elif data_source == "API OpenFoodFacts":
         use_api = True
         st.info("📡 Récupération des données depuis OpenFoodFacts")
         
@@ -81,7 +89,7 @@ def render_dataset_tab(
     col1, col2, col3 = st.columns([1, 1, 2])
 
     with col1:
-        button_label = "🌐 Charger depuis API" if use_api else "📊 Charger l'Excel"
+        button_label = "Charger depuis API" if use_api else "Charger l'Excel"
         if st.button(button_label, type="primary"):
             if use_api:
                 # Chargement depuis OpenFoodFacts API
@@ -109,7 +117,7 @@ def render_dataset_tab(
                     info_placeholder.empty()
                     
                     if df_raw.empty:
-                        st.error("❌ Aucun produit trouvé avec ces critères. Essayez de modifier la catégorie ou la recherche.")
+                        st.error("Aucun produit trouvé avec ces critères. Essayez de modifier la catégorie ou la recherche.")
                     else:
                         # Normaliser les données
                         with st.spinner("Normalisation des données..."):
@@ -120,7 +128,7 @@ def render_dataset_tab(
                         
                         st.success(f"✅ {len(df_normalized)} produits récupérés depuis OpenFoodFacts !")
                         
-                        with st.expander("📋 Rapport de récupération"):
+                        with st.expander("Rapport de récupération"):
                             st.write(f"**Produits bruts:** {len(df_raw)}")
                             st.write(f"**Après normalisation:** {len(df_normalized)}")
                             if norm_report.get('rows_removed', 0) > 0:
@@ -182,19 +190,19 @@ def render_dataset_tab(
 
         st.divider()
 
-        st.subheader("🔄 Traitements")
+        st.subheader("Traitements")
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("🧮 Recalculer Nutri-Score", type="secondary"):
+            if st.button(" Recalculer Nutri-Score", type="secondary"):
                 with st.spinner("Calcul du Nutri-Score sur le dataset..."):
                     try:
-                        # 🧮 1. Calcul du Nutri-Score
+                        #  1. Calcul du Nutri-Score
                         df_with_nutri = apply_nutriscore_excel(df)
                         st.session_state.df_processed = df_with_nutri
 
-                        # ✅ 2. Comparaison avec Nutri-Score original (si présent)
+                        # 2. Comparaison avec Nutri-Score original (si présent)
                         if (
                             'ns_label_original' in df_with_nutri.columns and
                             'ns_label_calc' in df_with_nutri.columns and
@@ -212,20 +220,22 @@ def render_dataset_tab(
                                 '⚠️ Score différent'
                             )
 
-                        # 📊 3. Affichage global
-                        label_dist = df_with_nutri["ns_label_calc"].value_counts()
-                        st.success("✅ Nutri-Score recalculé avec succès !")
-
-                        st.write("**Distribution des labels recalculés :**")
-                        for label, count in label_dist.items():
-                            st.write(f"- {label}: {count}")
-
-                        # 🧾 4. Comparaison détaillée (produit par produit)
+                        #  3. Stocker les résultats pour affichage persistant
+                        label_dist = df_with_nutri["ns_label_calc"].value_counts().to_dict()
+                        
+                        # Préparer le rapport de comparaison
+                        nutri_result = {
+                            "success": True,
+                            "label_dist": label_dist,
+                            "diff_df": None,
+                            "diff_only": None,
+                            "has_comparison": False
+                        }
+                        
+                        #  4. Comparaison détaillée (produit par produit)
                         if {'produit', 'ns_label_original', 'ns_label_calc',
                             'ns_score_original', 'ns_score_calc',
                             'Comparaison_NS', 'Comparaison_Score'}.issubset(df_with_nutri.columns):
-
-                            st.markdown("### 🔍 Comparaison détaillée (Original vs Recalculé)")
 
                             diff_df = df_with_nutri[
                                 ['produit',
@@ -237,23 +247,17 @@ def render_dataset_tab(
                                 (diff_df['Comparaison_NS'] != '✅ Label identique') |
                                 (diff_df['Comparaison_Score'] != '✅ Score identique')
                             ]
-
-                            if len(diff_only) > 0:
-                                st.warning(f"⚠️ {len(diff_only)} produit(s) présentent des écarts entre les Nutri-Scores :")
-                                st.dataframe(diff_only, use_container_width=True)
-                            else:
-                                st.success("✅ Tous les scores et labels Nutri-Score sont identiques.")
-
-                            st.write("### 👁️ Aperçu global :")
-                            st.dataframe(diff_df.head(30), use_container_width=True)
-
-                        else:
-                            st.info("ℹ️ Colonnes nécessaires à la comparaison manquantes (vérifie ton Excel).")
+                            
+                            nutri_result["has_comparison"] = True
+                            nutri_result["diff_df"] = diff_df
+                            nutri_result["diff_only"] = diff_only
+                        
+                        st.session_state.nutri_result = nutri_result
 
                     except Exception as e:
-                        st.error(f"Erreur calcul Nutri-Score : {e}")
+                        st.session_state.nutri_result = {"success": False, "error": str(e)}
                         import traceback
-                        st.code(traceback.format_exc())
+                        st.session_state.nutri_result["traceback"] = traceback.format_exc()
 
         with col2:
             if st.button("🎯 Appliquer ELECTRE TRI", type="secondary"):
@@ -273,23 +277,25 @@ def render_dataset_tab(
                             df_with_electre["electre_cat"] = classifications
                             st.session_state.df_processed = df_with_electre
 
-                            class_dist = classifications.value_counts()
+                            class_dist = classifications.value_counts().to_dict()
 
-                            st.success(f"✅ ELECTRE TRI ({variant}) appliqué !")
-                            st.info(
-                                f"Lambda = {lambda_val}, Poids personnalisés = {'Oui' if custom_weights else 'Non'}"
-                            )
-
-                            st.write("**Distribution des classes:**")
-                            for classe, count in class_dist.items():
-                                st.write(f"- {classe}: {count}")
+                            # Stocker les résultats pour affichage persistant
+                            st.session_state.electre_result = {
+                                "success": True,
+                                "variant": variant,
+                                "lambda_val": lambda_val,
+                                "custom_weights": custom_weights,
+                                "class_dist": class_dist
+                            }
 
                         except Exception as e:  # pragma: no cover - gestion d'erreur UI
-                            st.error(f"Erreur ELECTRE TRI : {e}")
+                            st.session_state.electre_result = {"success": False, "error": str(e)}
                             import traceback
+                            st.session_state.electre_result["traceback"] = traceback.format_exc()
 
-                            st.code(traceback.format_exc())
-
+        # Recharger df après les modifications potentielles
+        df = st.session_state.df_processed
+        
         with col3:
             has_nutri = "ns_label_calc" in df.columns
             has_electre = "electre_cat" in df.columns
@@ -354,9 +360,9 @@ def render_dataset_tab(
                                 st.info("Matrice de confusion non disponible")
                         
                         with viz_col2:
-                            metrics_path = "outputs/reports/metrics_comparison.png"
+                            metrics_path = "outputs/reports/metrics_summary.png"
                             if os.path.exists(metrics_path):
-                                st.image(metrics_path, caption="Comparaison des métriques", use_container_width=True)
+                                st.image(metrics_path, caption="Résumé des métriques", use_container_width=True)
                             else:
                                 st.info("Graphique des métriques non disponible")
 
@@ -376,9 +382,66 @@ def render_dataset_tab(
                         st.code(traceback.format_exc())
 
             if not (has_nutri and has_electre):
-                st.info("💡 Calculez d'abord Nutri-Score et ELECTRE TRI")
+                st.info(" Calculez d'abord Nutri-Score et ELECTRE TRI")
 
-            if st.button("🌟 Calculer Super Nutri-Score", type="secondary"):
+        # === Affichage persistant des résultats Nutri-Score ===
+        if "nutri_result" in st.session_state and st.session_state.nutri_result:
+            result = st.session_state.nutri_result
+            st.divider()
+            st.subheader("🔢 Résultats Nutri-Score")
+            
+            if result.get("success"):
+                st.success("✅ Nutri-Score recalculé avec succès !")
+                
+                st.write("**Distribution des labels recalculés :**")
+                for label, count in result.get("label_dist", {}).items():
+                    st.write(f"- {label}: {count}")
+                
+                if result.get("has_comparison"):
+                    st.markdown("### 🔍 Comparaison détaillée (Original vs Recalculé)")
+                    
+                    diff_only = result.get("diff_only")
+                    if diff_only is not None and len(diff_only) > 0:
+                        st.warning(f"⚠️ {len(diff_only)} produit(s) présentent des écarts entre les Nutri-Scores :")
+                        st.dataframe(diff_only, use_container_width=True)
+                    else:
+                        st.success("✅ Tous les scores et labels Nutri-Score sont identiques.")
+                    
+                    diff_df = result.get("diff_df")
+                    if diff_df is not None:
+                        st.write("### 👁️ Aperçu global :")
+                        st.dataframe(diff_df.head(30), use_container_width=True)
+                else:
+                    st.info("Colonnes nécessaires à la comparaison manquantes (vérifie ton Excel).")
+            else:
+                st.error(f"Erreur calcul Nutri-Score : {result.get('error')}")
+                if result.get("traceback"):
+                    st.code(result.get("traceback"))
+
+        # === Affichage persistant des résultats ELECTRE ===
+        if "electre_result" in st.session_state and st.session_state.electre_result:
+            result = st.session_state.electre_result
+            st.divider()
+            st.subheader("🎯 Résultats ELECTRE TRI")
+            
+            if result.get("success"):
+                st.success(f"✅ ELECTRE TRI ({result.get('variant')}) appliqué !")
+                st.info(
+                    f"Lambda = {result.get('lambda_val')}, Poids personnalisés = {'Oui' if result.get('custom_weights') else 'Non'}"
+                )
+                
+                st.write("**Distribution des classes:**")
+                for classe, count in result.get("class_dist", {}).items():
+                    st.write(f"- {classe}: {count}")
+            else:
+                st.error(f"Erreur ELECTRE TRI : {result.get('error')}")
+                if result.get("traceback"):
+                    st.code(result.get("traceback"))
+
+        # === Bouton Super Nutri-Score ===
+        st.divider()
+        with col3:
+            if st.button(" Calculer Super Nutri-Score", type="secondary"):
                 try:
                     df_super = st.session_state.df_processed.copy()
 
