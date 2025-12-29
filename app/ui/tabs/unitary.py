@@ -1,5 +1,3 @@
-"""Onglet de calcul individuel Nutri-Score & ELECTRE TRI."""
-
 from typing import Any, Dict, Optional
 
 import streamlit as st
@@ -97,7 +95,6 @@ def render_unitary_tab(
             help="Nombre d'additifs présents dans le produit (critère à minimiser pour ELECTRE TRI)",
         )
 
-        # ➕ Ajouter juste ici :
         st.write("**Certification Bio :**")
         is_bio = st.selectbox(
             "Produit certifié Bio ?",
@@ -106,14 +103,7 @@ def render_unitary_tab(
         )
         is_bio_value = 1 if is_bio == "Oui" else 0
 
-        #st.write("**Green-Score :**")
-        #green_score = st.selectbox(
-        #    "Score environnemental (Green-Score)",
-        #    ["A", "B", "C", "D", "E"],
-        #    index=2
-        #)
-
-
+     
         is_kcal = energy_unit == "kcal"
         is_salt = "Sel" in sodium_unit
 
@@ -170,7 +160,7 @@ def render_unitary_tab(
                 st.success("Calcul Nutri-Score terminé !")
                 display_nutriscore_result(nutri_result)
 
-            except Exception as e:  # pragma: no cover - gestion d'erreur UI
+            except Exception as e:  
                 st.error(f"Erreur calcul Nutri-Score : {e}")
 
     with col2:
@@ -202,24 +192,23 @@ def render_unitary_tab(
 
             except Exception as e:  # pragma: no cover - gestion d'erreur UI
                 st.error(f"Erreur classification ELECTRE TRI : {e}")
-        # —————————————————————————————————————————
-        # BOUTON SUPER NUTRI-SCORE
-          # -------------------------------------------------
-    # ⭐ SUPER NUTRI-SCORE : VERSION PONDÉE
+
+
+    # -------------------------------------------------
+    #  SUPER NUTRI-SCORE : VERSION PONDÉE
     # -------------------------------------------------
 
     st.divider()
     st.subheader("🌟 Super Nutri-Score (Version pondérée)")
 
-    # ❗ Le Green-Score DOIT être ici (AVANT le bouton)
     green_label = st.selectbox(
         "Green-Score du produit",
         ["A", "B", "C", "D", "E"],
         index=2
     )
 
-    # Conversion immédiate
-    green_points = {"A": 2, "B": 1, "C": 0, "D": -1, "E": -2}.get(green_label, 0)
+    #Conversion immédiate
+    green_points = {"A": 1.0, "B": 0.75, "C": 0.50, "D": 0.25, "E": 0.0}.get(green_label, 0)
 
     st.divider()
     st.subheader("🌟 Super Nutri-Score (Version pondérée)")
@@ -227,19 +216,8 @@ def render_unitary_tab(
     if st.button("🌟 Calculer SuperNutri-Score Pondéré", type="primary"):
 
         try:
-            # 1) Calculer Nutri-Score
-            nutri_result = compute_nutriscore_single(
-                energy_kj=energy_kj,
-                saturated_fat_g=sat_fat,
-                sugars_g=sugars,
-                sodium_mg_or_salt_g=sodium_mg,
-                fiber_g=fiber,
-                protein_g=proteins,
-                fruits_veg_nuts_percent=fruits_veg,
-            )
-            nutri_label = nutri_result["label"]
 
-            # 2) Calcul ELECTRE TRI
+            #Calcul ELECTRE TRI
             criteria_values = {
                 "energy_100g": energy_kj,
                 "saturated_fat_100g": sat_fat,
@@ -259,45 +237,37 @@ def render_unitary_tab(
             )
             electre_label = electre_result["class"]
 
-            # 3) Conversion en points
-            #nutri_points = {"A": 2, "B": 1, "C": 0, "D": -1, "E": -2}[nutri_label]
-            electre_points = {"A'": 2, "B'": 1, "C'": 0, "D'": -1, "E'": -2}[electre_label]
+            #Conversion en points
+            electre_points = {"A'": 1.0, "B'": 0.75, "C'": 0.5, "D'": 0.25, "E'": 0}[electre_label]
             bio_points = 1 if is_bio_value == 1 else 0
             
-            #green_label = st.selectbox(
-            #"Green-Score du produit",
-            #["A", "B", "C", "D", "E"],
-            #index=2
-            #)
-
-            #green_points = {"A": 2, "B": 1, "C": 0, "D": -1, "E": -2}.get(green_label, 0)
-
-            # 4) Pondération des scores
+  
+            #Pondération des scores
             weighted_score = (
                 0.3 * green_points +
                 0.6 * electre_points +
                 0.1 * bio_points
             )
 
-            # 5) Détermination du Super Nutri-Score final
-            if weighted_score >= 1.5:
+            #Détermination du Super Nutri-Score final
+            if weighted_score >= 0.80:
                 super_label = "A''"
-            elif weighted_score >= 0.5:
+            elif weighted_score >= 0.60:
                 super_label = "B''"
-            elif weighted_score >= -0.5:
+            elif weighted_score >= 0.40:
                 super_label = "C''"
-            elif weighted_score >= -1.5:
+            elif weighted_score >= 0.20:
                 super_label = "D''"
             else:
                 super_label = "E''"
 
-            # 6) Affichage final
+            # Affichage final
             st.success(f"🌟 Super Nutri-Score Pondéré : **{super_label}**")
             st.info(f"""
             **Détails du calcul :**
-            - green_points = {green_points} → {green_points} (×0.3)
-            - ELECTRE TRI = {electre_label} → {electre_points} (×0.6)
-            - Bio = {is_bio_value} (×0.1)
+            - green_points = {green_points} → {green_points} (*0.3)
+            - ELECTRE TRI = {electre_label} → {electre_points} (*0.6)
+            - Bio = {is_bio_value} (*0.1)
             - Score pondéré final = **{weighted_score:.3f}**
             """)
 

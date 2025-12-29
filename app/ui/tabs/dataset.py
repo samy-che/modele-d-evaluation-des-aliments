@@ -1,5 +1,3 @@
-"""Onglet de traitement de dataset et comparaison des méthodes."""
-
 import os
 from typing import Any, Dict, Optional
 
@@ -393,8 +391,8 @@ def render_dataset_tab(
                             .str.strip()
                             .str.lower()
                             .map({
-                                "oui": 1, "yes": 1, "true": 1, "1": 1,
-                                "non": 0, "no": 0, "false": 0, "0": 0
+                                "oui": 1, "yes": 1, "true": 1, "1": 1, "Oui" : 1, "OUI" : 1, 
+                                "non": 0, "no": 0, "false": 0, "0": 0, "Non" : 0, "NON" : 0
                             })
                             .fillna(0)
                             .astype(int)
@@ -406,34 +404,31 @@ def render_dataset_tab(
                     # Vérifier colonne Green-Score
                     if "green label" in df_super.columns:
                         df_super["green_points"] = df_super["green label"].astype(str).str.upper().map({
-                            "A": 2, "B": 1, "C": 0, "D": -1, "E": -2
+                            "A": 1, "B": 0.75, "C": 0.50, "D": 0.25, "E": 0
                         }).fillna(0)
                     else:
                         st.warning("⚠️ Colonne 'green_score' absente : Green-Score mis à 0.")
                         df_super["green_points"] = 0
 
-                    # Colonnes obligatoires
-                    required_cols = {"ns_label_calc", "electre_cat", "is_bio", "green_points"}
+                    # Colonnes obligatoires            "ns_label_calc",
+                    required_cols = {"electre_cat", "is_bio", "green_points"}
                     missing = required_cols - set(df_super.columns)
                     if missing:
                         st.error(f"Colonnes manquantes pour SuperNutri-Score : {missing}")
                         return
 
-                    # Mapping NutriScore & Electre
-                    nutri_map = {"A": 2, "B": 1, "C": 0, "D": -1, "E": -2}
-                    electre_map = {"A'": 2, "B'": 1, "C'": 0, "D'": -1, "E'": -2}
+                    #Mapping Electre
+                    electre_map = {"A'": 1, "B'": 0.75, "C'": 0.5, "D'": 0.25, "E'": 1}
 
-                    #df_super["nutri_points"] = df_super["ns_label_calc"].map(nutri_map).fillna(0)
                     df_super["electre_points"] = df_super["electre_cat"].map(electre_map).fillna(0)
 
                     # Pondérations
-                    #w_nutri = 0.45
+                 
                     w_electre = 0.6
                     w_bio = 0.1
                     w_green = 0.3
 
                     df_super["super_score"] = (
-                        #df_super["nutri_points"] * w_nutri +
                         df_super["electre_points"] * w_electre +
                         df_super["is_bio"] * w_bio +
                         df_super["green_points"] * w_green
@@ -441,11 +436,11 @@ def render_dataset_tab(
 
                     # Classification finale
                     def score_to_letter(s):
-                        if s >= 1.5: return "A"
-                        if s >= 0.5: return "B"
-                        if s >= -0.5: return "C"
-                        if s >= -1.5: return "D"
-                        return "E"
+                        if s >= 0.80: return "A'"
+                        if s >= 0.60: return "B'"
+                        if s >= 0.40: return "C'"
+                        if s >= 0.20: return "D'"
+                        return "E'"
                     
 
                     df_super["super_label"] = df_super["super_score"].apply(score_to_letter)
