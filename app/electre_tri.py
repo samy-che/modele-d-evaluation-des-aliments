@@ -259,14 +259,13 @@ class ElectreTri:
     
     def _classify_optimistic(self, alternative: Dict[str, float]) -> str:
         """
-        Classification optimiste : compare les profils à a du pire (b4) au meilleur (b1).
+        Classification optimiste selon ELECTRE TRI.
         
-        Dans ELECTRE TRI optimiste :
-        - Si b4 surclasse a → classe E' (la plus basse)
-        - Si b3 surclasse a mais pas b4 → classe D'
-        - Si b2 surclasse a mais pas b3 → classe C'
-        - Si b1 surclasse a mais pas b2 → classe B'
-        - Si aucun profil ne surclasse a → classe A'
+        Procédure : pour chaque aliment H, faire croître les indices des profils
+        jusqu'au premier indice k tel que bk S H ET NON(H S bk).
+        L'aliment H est alors affecté à la catégorie Ck-1.
+        
+        Avec notre numérotation (b1=meilleur, b4=pire), on parcourt de b4 à b1.
         
         Args:
             alternative: Valeurs de l'alternative à classer
@@ -277,26 +276,31 @@ class ElectreTri:
         # Récupérer tous les profils limites de la configuration
         profiles = self.params['profiles']
         
-        # Définir l'ordre des profils du moins exigeant au plus exigeant
+        # Parcourir du profil le moins exigeant au plus exigeant
+        # Dans notre convention : b4 (pire) → b1 (meilleur)
         profile_names_ordered = ['b4', 'b3', 'b2', 'b1']
-        # Classes correspondantes (E' = pire, A' = meilleure)
-        classes = ['E\'', 'D\'', 'C\'', 'B\'', 'A\'']
+        # Classes correspondantes quand la condition est satisfaite
+        # Si condition sur b4 → E', si sur b3 → D', etc.
+        classes = ['E\'', 'D\'', 'C\'', 'B\'']
         
-        # Tester les profils dans l'ordre croissant d'exigence (b4, b3, b2, b1)
         for i, profile_name in enumerate(profile_names_ordered):
-            # Vérifier que le profil existe dans la configuration
             if profile_name not in profiles:
-                continue  # Passer au profil suivant si celui-ci n'existe pas
+                continue
                 
-            # Récupérer les valeurs du profil limite
             profile = profiles[profile_name]
             
-            # Tester si le profil b_i surclasse l'alternative (ordre inversé)
-            if self._outrank_relation(profile, alternative):
-                # Si b_i surclasse a, alors a appartient à la classe i
+            # Selon la description ELECTRE TRI :
+            # Condition : bk S H ET NON(H S bk)
+            # bk surclasse H : le profil est "au moins aussi bon" que l'alternative
+            profile_outranks_alt = self._outrank_relation(profile, alternative)
+            # H surclasse bk : l'alternative est "au moins aussi bonne" que le profil
+            alt_outranks_profile = self._outrank_relation(alternative, profile)
+            
+            # Si bk surclasse H ET H ne surclasse pas bk → incomparabilité en faveur du profil
+            if profile_outranks_alt and not alt_outranks_profile:
                 return classes[i]
         
-        # Si aucun profil ne surclasse a, alors a appartient à la classe la plus haute
+        # Si aucune condition n'est satisfaite, H appartient à la meilleure classe
         return 'A\''
     
     def classify_alternative(self, 

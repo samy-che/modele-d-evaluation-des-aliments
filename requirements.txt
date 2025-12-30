@@ -12,6 +12,7 @@ pyyaml>=6.0
 # Visualization and plotting
 matplotlib>=3.7.0
 seaborn>=0.12.0
+plotly>=5.18.0
 
 # Machine learning metrics (optionnel selon spécifications)
 scikit-learn>=1.3.0

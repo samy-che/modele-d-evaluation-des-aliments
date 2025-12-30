@@ -4,6 +4,10 @@ from typing import Any, Dict, Optional
 import streamlit as st
 import requests
 import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 from app.electre_tri import electre_sorting
@@ -177,16 +181,313 @@ def render_dataset_tab(
         st.divider()
 
         st.subheader("👁️ Aperçu des données")
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            st.dataframe(df.head(110), use_container_width=True)
-
-        with col2:
-            st.metric("Nombre de produits", len(df))
-            nutritional_cols = ["energy_100g", "proteins_100g", "fiber_100g"]
-            available_cols = [col for col in nutritional_cols if col in df.columns]
-            st.metric("Colonnes nutritionnelles", len(available_cols))
+        
+        # Onglets pour l'aperçu des données
+        preview_tab1, preview_tab2, preview_tab3, preview_tab4 = st.tabs([
+            "📋 Tableau", "📊 Statistiques", "📈 Graphiques", "🔍 Analyse"
+        ])
+        
+        with preview_tab1:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.dataframe(df.head(110), use_container_width=True)
+            with col2:
+                st.metric("Nombre de produits", len(df))
+                nutritional_cols = ["energy_100g", "proteins_100g", "fiber_100g", 
+                                   "sugars_100g", "saturated_fat_100g", "sodium_100g"]
+                available_cols = [col for col in nutritional_cols if col in df.columns]
+                st.metric("Colonnes nutritionnelles", len(available_cols))
+                st.metric("Total colonnes", len(df.columns))
+                
+                # Données manquantes
+                missing_pct = (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+                st.metric("Données manquantes", f"{missing_pct:.1f}%")
+        
+        with preview_tab2:
+            st.markdown("### 📊 Statistiques descriptives")
+            
+            # Colonnes numériques disponibles
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            
+            if numeric_cols:
+                # Sélection des colonnes à analyser
+                nutritional_cols_available = [col for col in [
+                    "energy_100g", "proteins_100g", "fiber_100g", 
+                    "sugars_100g", "saturated_fat_100g", "sodium_100g",
+                    "fruits_veg_nuts_percent"
+                ] if col in df.columns]
+                
+                if nutritional_cols_available:
+                    st.markdown("#### 🥗 Colonnes nutritionnelles")
+                    stats_df = df[nutritional_cols_available].describe().T
+                    stats_df.columns = ['Nombre', 'Moyenne', 'Écart-type', 'Min', '25%', 'Médiane', '75%', 'Max']
+                    st.dataframe(stats_df.style.format("{:.2f}"), use_container_width=True)
+                
+                # Métriques clés en colonnes
+                st.markdown("#### 📈 Métriques clés")
+                metric_cols = st.columns(4)
+                
+                if "energy_100g" in df.columns:
+                    with metric_cols[0]:
+                        st.metric("Énergie moyenne", f"{df['energy_100g'].mean():.0f} kJ")
+                        st.metric("Énergie max", f"{df['energy_100g'].max():.0f} kJ")
+                
+                if "sugars_100g" in df.columns:
+                    with metric_cols[1]:
+                        st.metric("Sucres moyen", f"{df['sugars_100g'].mean():.1f} g")
+                        st.metric("Sucres max", f"{df['sugars_100g'].max():.1f} g")
+                
+                if "proteins_100g" in df.columns:
+                    with metric_cols[2]:
+                        st.metric("Protéines moyenne", f"{df['proteins_100g'].mean():.1f} g")
+                        st.metric("Protéines max", f"{df['proteins_100g'].max():.1f} g")
+                
+                if "fiber_100g" in df.columns:
+                    with metric_cols[3]:
+                        st.metric("Fibres moyenne", f"{df['fiber_100g'].mean():.1f} g")
+                        st.metric("Fibres max", f"{df['fiber_100g'].max():.1f} g")
+                
+                # Statistiques sur les données manquantes
+                st.markdown("#### ⚠️ Données manquantes par colonne")
+                missing_data = df.isnull().sum()
+                missing_data = missing_data[missing_data > 0]
+                if len(missing_data) > 0:
+                    missing_df = pd.DataFrame({
+                        'Colonne': missing_data.index,
+                        'Valeurs manquantes': missing_data.values,
+                        'Pourcentage': (missing_data.values / len(df) * 100).round(2)
+                    })
+                    st.dataframe(missing_df, use_container_width=True)
+                else:
+                    st.success("✅ Aucune donnée manquante dans le dataset !")
+            else:
+                st.warning("Aucune colonne numérique disponible pour les statistiques.")
+        
+        with preview_tab3:
+            st.markdown("### 📈 Visualisations")
+            
+            # Graphiques interactifs
+            graph_col1, graph_col2 = st.columns(2)
+            
+            with graph_col1:
+                # Distribution du Nutri-Score si disponible
+                nutriscore_cols = ['nutriscore_label', 'ns_label_calc', 'ns_label_original']
+                nutri_col = next((col for col in nutriscore_cols if col in df.columns), None)
+                
+                if nutri_col:
+                    st.markdown("#### 🏷️ Distribution Nutri-Score")
+                    nutri_counts = df[nutri_col].value_counts().reindex(['A', 'B', 'C', 'D', 'E'], fill_value=0)
+                    colors = {'A': '#038141', 'B': '#85BB2F', 'C': '#FECB02', 'D': '#EE8100', 'E': '#E63E11'}
+                    
+                    fig_nutri = go.Figure(data=[
+                        go.Bar(
+                            x=nutri_counts.index,
+                            y=nutri_counts.values,
+                            marker_color=[colors.get(x, '#666666') for x in nutri_counts.index],
+                            text=nutri_counts.values,
+                            textposition='auto'
+                        )
+                    ])
+                    fig_nutri.update_layout(
+                        xaxis_title="Nutri-Score",
+                        yaxis_title="Nombre de produits",
+                        height=350,
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_nutri, use_container_width=True)
+                else:
+                    st.info("Nutri-Score non disponible. Chargez les données et recalculez le Nutri-Score.")
+                
+                # Histogramme de l'énergie
+                if "energy_100g" in df.columns:
+                    st.markdown("#### ⚡ Distribution de l'énergie (kJ/100g)")
+                    fig_energy = px.histogram(
+                        df, x="energy_100g", nbins=30,
+                        color_discrete_sequence=['#3498db']
+                    )
+                    fig_energy.update_layout(
+                        xaxis_title="Énergie (kJ/100g)",
+                        yaxis_title="Fréquence",
+                        height=350
+                    )
+                    st.plotly_chart(fig_energy, use_container_width=True)
+            
+            with graph_col2:
+                # Distribution ELECTRE si disponible
+                if "electre_cat" in df.columns:
+                    st.markdown("#### 🎯 Distribution ELECTRE TRI")
+                    electre_counts = df["electre_cat"].value_counts().reindex(["A'", "B'", "C'", "D'", "E'"], fill_value=0)
+                    colors_electre = {"A'": '#038141', "B'": '#85BB2F', "C'": '#FECB02', "D'": '#EE8100', "E'": '#E63E11'}
+                    
+                    fig_electre = go.Figure(data=[
+                        go.Bar(
+                            x=electre_counts.index,
+                            y=electre_counts.values,
+                            marker_color=[colors_electre.get(x, '#666666') for x in electre_counts.index],
+                            text=electre_counts.values,
+                            textposition='auto'
+                        )
+                    ])
+                    fig_electre.update_layout(
+                        xaxis_title="Catégorie ELECTRE",
+                        yaxis_title="Nombre de produits",
+                        height=350,
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_electre, use_container_width=True)
+                else:
+                    st.info("Classification ELECTRE non disponible. Appliquez ELECTRE TRI pour voir ce graphique.")
+                
+                # Boxplot des sucres
+                if "sugars_100g" in df.columns:
+                    st.markdown("#### 🍬 Distribution des sucres (g/100g)")
+                    fig_sugar = px.box(
+                        df, y="sugars_100g",
+                        color_discrete_sequence=['#e74c3c']
+                    )
+                    fig_sugar.update_layout(
+                        yaxis_title="Sucres (g/100g)",
+                        height=350
+                    )
+                    st.plotly_chart(fig_sugar, use_container_width=True)
+            
+            # Graphique de corrélation
+            st.markdown("#### 🔗 Corrélations nutritionnelles")
+            corr_cols = [col for col in ["energy_100g", "proteins_100g", "fiber_100g", 
+                                         "sugars_100g", "saturated_fat_100g", "sodium_100g"] 
+                        if col in df.columns]
+            
+            if len(corr_cols) >= 2:
+                corr_matrix = df[corr_cols].corr()
+                
+                # Renommer pour un affichage plus clair
+                rename_map = {
+                    "energy_100g": "Énergie",
+                    "proteins_100g": "Protéines",
+                    "fiber_100g": "Fibres",
+                    "sugars_100g": "Sucres",
+                    "saturated_fat_100g": "Graisses sat.",
+                    "sodium_100g": "Sodium"
+                }
+                corr_matrix = corr_matrix.rename(columns=rename_map, index=rename_map)
+                
+                fig_corr = px.imshow(
+                    corr_matrix,
+                    text_auto='.2f',
+                    color_continuous_scale='RdBu_r',
+                    aspect='auto'
+                )
+                fig_corr.update_layout(height=400)
+                st.plotly_chart(fig_corr, use_container_width=True)
+            else:
+                st.info("Pas assez de colonnes numériques pour afficher les corrélations.")
+        
+        with preview_tab4:
+            st.markdown("### 🔍 Analyse approfondie")
+            
+            # Comparaison Nutri-Score vs ELECTRE
+            nutri_col = next((col for col in ['ns_label_calc', 'nutriscore_label', 'ns_label_original'] 
+                             if col in df.columns), None)
+            
+            if nutri_col and "electre_cat" in df.columns:
+                st.markdown("#### 🔄 Comparaison Nutri-Score vs ELECTRE")
+                
+                # Créer un mapping pour comparer
+                ns_to_electre = {'A': "A'", 'B': "B'", 'C': "C'", 'D': "D'", 'E': "E'"}
+                df_compare = df[[nutri_col, 'electre_cat']].copy()
+                df_compare['NS_mapped'] = df_compare[nutri_col].map(ns_to_electre)
+                df_compare['Match'] = df_compare['NS_mapped'] == df_compare['electre_cat']
+                
+                match_pct = df_compare['Match'].mean() * 100
+                
+                col_comp1, col_comp2, col_comp3 = st.columns(3)
+                with col_comp1:
+                    st.metric("Concordance", f"{match_pct:.1f}%")
+                with col_comp2:
+                    st.metric("Produits concordants", f"{df_compare['Match'].sum()}")
+                with col_comp3:
+                    st.metric("Produits divergents", f"{(~df_compare['Match']).sum()}")
+                
+                # Heatmap de confusion
+                confusion = pd.crosstab(df_compare[nutri_col], df_compare['electre_cat'])
+                # Réordonner les colonnes
+                order_ns = ['A', 'B', 'C', 'D', 'E']
+                order_electre = ["A'", "B'", "C'", "D'", "E'"]
+                confusion = confusion.reindex(index=[x for x in order_ns if x in confusion.index],
+                                             columns=[x for x in order_electre if x in confusion.columns])
+                
+                fig_confusion = px.imshow(
+                    confusion,
+                    text_auto=True,
+                    color_continuous_scale='Blues',
+                    labels={'x': 'ELECTRE TRI', 'y': 'Nutri-Score', 'color': 'Nombre'}
+                )
+                fig_confusion.update_layout(
+                    xaxis_title="ELECTRE TRI",
+                    yaxis_title="Nutri-Score",
+                    height=400
+                )
+                st.plotly_chart(fig_confusion, use_container_width=True)
+            
+            # Scatter plot interactif
+            st.markdown("#### 📊 Exploration des données")
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            
+            if len(numeric_cols) >= 2:
+                col_x, col_y, col_color = st.columns(3)
+                
+                with col_x:
+                    x_axis = st.selectbox("Axe X", numeric_cols, index=0)
+                with col_y:
+                    y_axis = st.selectbox("Axe Y", numeric_cols, 
+                                         index=min(1, len(numeric_cols)-1))
+                with col_color:
+                    color_options = ['Aucune'] + [col for col in df.columns if df[col].nunique() < 20]
+                    color_col = st.selectbox("Couleur par", color_options)
+                
+                if color_col == 'Aucune':
+                    fig_scatter = px.scatter(df, x=x_axis, y=y_axis, 
+                                            hover_data=['produit'] if 'produit' in df.columns else None)
+                else:
+                    fig_scatter = px.scatter(df, x=x_axis, y=y_axis, color=color_col,
+                                            hover_data=['produit'] if 'produit' in df.columns else None)
+                
+                fig_scatter.update_layout(height=500)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # Top/Bottom produits
+            st.markdown("#### 🏆 Top produits")
+            
+            if nutri_col:
+                top_col1, top_col2 = st.columns(2)
+                
+                with top_col1:
+                    st.markdown("**🌟 Meilleurs produits (Nutri-Score A)**")
+                    top_a = df[df[nutri_col] == 'A']
+                    if len(top_a) > 0:
+                        display_cols = ['produit'] if 'produit' in df.columns else []
+                        display_cols.extend([col for col in ['energy_100g', 'sugars_100g', 'proteins_100g'] 
+                                           if col in df.columns])
+                        if display_cols:
+                            st.dataframe(top_a[display_cols].head(10), use_container_width=True)
+                        else:
+                            st.write(f"{len(top_a)} produits avec Nutri-Score A")
+                    else:
+                        st.info("Aucun produit avec Nutri-Score A")
+                
+                with top_col2:
+                    st.markdown("**⚠️ Produits à améliorer (Nutri-Score E)**")
+                    top_e = df[df[nutri_col] == 'E']
+                    if len(top_e) > 0:
+                        display_cols = ['produit'] if 'produit' in df.columns else []
+                        display_cols.extend([col for col in ['energy_100g', 'sugars_100g', 'proteins_100g'] 
+                                           if col in df.columns])
+                        if display_cols:
+                            st.dataframe(top_e[display_cols].head(10), use_container_width=True)
+                        else:
+                            st.write(f"{len(top_e)} produits avec Nutri-Score E")
+                    else:
+                        st.success("Aucun produit avec Nutri-Score E !")
 
         st.divider()
 
