@@ -4,16 +4,16 @@ Implémente les variantes pessimiste et optimiste avec profils limites.
 """
 
 # Import des bibliothèques nécessaires
-import pandas as pd  # Pour manipuler les données sous forme de DataFrames
-import numpy as np   # Pour les calculs numériques et la gestion des valeurs NaN
-import yaml         # Pour lire les fichiers de configuration YAML
-import logging      # Pour enregistrer les logs et messages de débogage
-from typing import Dict, List, Tuple, Optional  # Pour les annotations de types
-from pathlib import Path  # Pour gérer les chemins de fichiers de manière portable
+import pandas as pd  
+import numpy as np   
+import yaml         
+import logging      
+from typing import Dict, List, Tuple, Optional  
+from pathlib import Path  
 from app.utils.paths import get_config_path
 
 # Configuration du système de logging pour tracer l'exécution
-logger = logging.getLogger(__name__)  # Créer un logger spécifique à ce module
+logger = logging.getLogger(__name__)  
 
 class ElectreTri:
     """Classe d'implémentation ELECTRE TRI-B avec profils limites."""
@@ -37,35 +37,35 @@ class ElectreTri:
     def _load_config(self) -> Dict:
         """Charge la configuration ELECTRE depuis le fichier YAML."""
         try:
-            # Ouvrir le fichier de configuration en mode lecture avec encodage UTF-8
+
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                # Parser le contenu YAML et le convertir en dictionnaire Python
+
                 config = yaml.safe_load(f)
-            # Enregistrer un message de succès dans les logs
+            
             logger.info(f"Configuration ELECTRE chargée depuis {self.config_path}")
-            # Retourner la configuration chargée
+            
             return config
         except FileNotFoundError:
-            # Gérer le cas où le fichier de configuration n'existe pas
+            
             logger.error(f"Fichier de configuration ELECTRE non trouvé : {self.config_path}")
-            raise  # Relancer l'exception pour arrêter l'exécution
+            raise  
         except yaml.YAMLError as e:
-            # Gérer les erreurs de syntaxe dans le fichier YAML
+            
             logger.error(f"Erreur de parsing YAML : {e}")
-            raise  # Relancer l'exception
+            raise  
     
     def _validate_config(self):
         """Valide la cohérence de la configuration."""
         # Liste des sections obligatoires dans la configuration ELECTRE
         required_sections = ['weights', 'directions', 'profiles', 'lambda']
         
-        # Vérifier que toutes les sections requises sont présentes
+
         for section in required_sections:
             if section not in self.params:
-                # Lever une exception si une section obligatoire manque
+
                 raise ValueError(f"Section manquante dans la config ELECTRE : {section}")
         
-        # Extraire l'ensemble des critères définis dans les poids
+
         criteria = set(self.params['weights'].keys())
         
         # Vérifier la cohérence des critères dans les autres sections
@@ -73,21 +73,21 @@ class ElectreTri:
             if section == 'profiles':
                 # Pour les profils, vérifier chaque profil limite individuellement
                 for profile_name, profile_values in self.params['profiles'].items():
-                    # Obtenir les critères définis pour ce profil
+
                     profile_criteria = set(profile_values.keys())
-                    # Vérifier que tous les critères des poids sont présents dans le profil
+
                     if not criteria.issubset(profile_criteria):
-                        # Calculer les critères manquants
+
                         missing = criteria - profile_criteria
-                        # Avertir mais ne pas arrêter (profil potentiellement incomplet)
+
                         logger.warning(f"Critères manquants dans profil {profile_name} : {missing}")
             else:
-                # Pour les autres sections (directions), vérifier directement
+
                 section_criteria = set(self.params[section].keys())
                 if not criteria.issubset(section_criteria):
-                    # Calculer les critères manquants
+
                     missing = criteria - section_criteria
-                    # Avertir des critères manquants
+
                     logger.warning(f"Critères manquants dans section {section} : {missing}")
         
         # Valider le paramètre lambda (seuil de concordance)

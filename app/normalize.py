@@ -49,7 +49,7 @@ class DataNormalizer:
                 # Même logique pour le kilojoule : un seul nombre doit être interprété
                 return float(match.group(1)), 'kJ'
         
-        # Essayer de parser comme nombre pur
+        # Si aucune unité n'est trouvée, tenter de parser la valeur brute
         try:
             # Si aucune unité n'est donnée, on suppose un enregistrement en kJ
             return float(energy_str), 'kJ'
